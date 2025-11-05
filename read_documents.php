@@ -1,16 +1,14 @@
 <?php
 // live_document_viewer.php
-// Single-file simple document viewer + uploader using PHP backend.
-// Supports: PDF (embedded directly), Office documents (DOC/DOCX/XLS/XLSX/PPT/PPTX)
-// Office documents are embedded via Microsoft's Office Online viewer which requires a public URL.
-// If you run locally, use a tunneling tool (e.g. ngrok) or convert files to PDF on the server.
+// Simple Live Document Viewer + Uploader (using Google Docs Viewer)
+// Supports: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP
 
 // Configuration
 $uploadDir = __DIR__ . '/uploads';
 $maxFileSize = 25 * 1024 * 1024; // 25 MB
 $allowedExt = ['pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];
 
-// Make sure upload folder exists
+// Ensure upload folder exists
 if (!file_exists($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }
@@ -28,14 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
         if (!in_array($ext, $allowedExt)) {
             $uploadError = 'File type not allowed.';
         } else {
-            // Move uploaded file to uploads directory with a safe name
+            // Sanitize and move uploaded file
             $base = pathinfo($file['name'], PATHINFO_FILENAME);
             $safeBase = preg_replace('/[^A-Za-z0-9\-_]/', '_', $base);
             $target = $uploadDir . '/' . $safeBase . '_' . time() . '.' . $ext;
             if (!move_uploaded_file($file['tmp_name'], $target)) {
                 $uploadError = 'Failed to move uploaded file.';
             } else {
-                // Success — redirect to avoid resubmission
                 header('Location: ' . $_SERVER['PHP_SELF']);
                 exit;
             }
@@ -43,14 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     }
 }
 
-// List files
+// List uploaded files
 $files = array_values(array_filter(scandir($uploadDir), function($f) use($uploadDir){
     return is_file($uploadDir . '/' . $f);
 }));
 
-// Helper: full public URL to a file
+// Helper to create a public URL for the uploaded file
 function public_url($path) {
-    // Build absolute URL based on current request
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'];
     $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
@@ -58,35 +54,33 @@ function public_url($path) {
     return $scheme . '://' . $host . $scriptDir . '/' . ltrim($path, '/');
 }
 
-// Determine file type
 function ext($filename) {
     return strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 }
-
 ?>
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Live Document Viewer</title>
+  <title>Live Document Viewer (Google Docs)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { padding: 20px; }
     .file-list { max-height: 60vh; overflow:auto; }
     .viewer { height: 80vh; border: 1px solid #ddd; }
-    iframe { width:100%; height:100%; border: none; }
+    iframe { width:100%; height:100%; border:none; }
   </style>
 </head>
 <body>
 <div class="container">
-  <h1 class="mb-3">Live Document Viewer</h1>
+  <h1 class="mb-3">Live Document Viewer (Google Docs)</h1>
   <div class="row">
     <div class="col-md-4">
       <div class="card mb-3">
         <div class="card-body">
-          <h5 class="card-title">Upload document</h5>
-          <p class="small text-muted">Allowed: pdf, doc, docx, xls, xlsx, ppt, pptx, odt, ods, odp. Max 25MB.</p>
+          <h5 class="card-title">Upload Document</h5>
+          <p class="small text-muted">Allowed: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP (Max 25MB)</p>
           <?php if ($uploadError): ?>
             <div class="alert alert-danger"><?php echo htmlspecialchars($uploadError); ?></div>
           <?php endif; ?>
@@ -101,15 +95,12 @@ function ext($filename) {
 
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title">Uploaded files</h5>
+          <h5 class="card-title">Uploaded Files</h5>
           <div class="file-list list-group">
             <?php if (empty($files)): ?>
-              <div class="text-muted">No files yet</div>
+              <div class="text-muted">No files uploaded yet.</div>
             <?php else: ?>
-              <?php foreach ($files as $f):
-                  $u = public_url('uploads/' . rawurlencode($f));
-                  $e = ext($f);
-              ?>
+              <?php foreach ($files as $f): $u = public_url('uploads/' . rawurlencode($f)); $e = ext($f); ?>
                 <a href="#" class="list-group-item list-group-item-action file-item" data-filename="<?php echo htmlspecialchars($f); ?>" data-url="<?php echo htmlspecialchars($u); ?>" data-ext="<?php echo $e; ?>">
                   <?php echo htmlspecialchars($f); ?>
                 </a>
@@ -118,23 +109,22 @@ function ext($filename) {
           </div>
         </div>
       </div>
-
     </div>
+
     <div class="col-md-8">
       <div class="card">
         <div class="card-body">
           <h5 class="card-title">Viewer</h5>
           <div id="viewer" class="viewer d-flex align-items-center justify-content-center text-muted">
-            Select a file from the list to view it here.
+            Select a file to preview here.
           </div>
           <div class="mt-2">
-            <small class="text-muted">Note: Microsoft Office embeds require the file to be reachable via the public internet. If you're running this on localhost, use a tunnelling tool (e.g. ngrok) or convert the document to PDF on the server for local preview.</small>
+            <small class="text-muted">Google Docs Viewer requires the file to be publicly accessible via the Internet. Localhost won't work unless you use a tunneling service (like ngrok).</small>
           </div>
         </div>
       </div>
     </div>
   </div>
-
 </div>
 
 <script>
@@ -154,24 +144,13 @@ function ext($filename) {
         const ext = this.dataset.ext.toLowerCase();
         clearViewer();
 
-        if (ext === 'pdf') {
-          // PDF: embed directly in iframe (browser will handle)
-          const ifr = document.createElement('iframe');
-          ifr.src = url;
-          viewer.appendChild(ifr);
-        } else if (['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'].includes(ext)) {
-          // Office documents: use Microsoft's Office Online viewer
-          // IMPORTANT: The file must be publicly accessible via the url.
-          const officeViewer = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(url);
-          const ifr = document.createElement('iframe');
-          ifr.src = officeViewer;
-          viewer.appendChild(ifr);
+        let iframe = document.createElement('iframe');
+        if (['pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'].includes(ext)) {
+          iframe.src = 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=true';
         } else {
-          // Fallback: attempt to download or show using Google Docs viewer
-          const ifr = document.createElement('iframe');
-          ifr.src = url;
-          viewer.appendChild(ifr);
+          iframe.src = url; // fallback direct
         }
+        viewer.appendChild(iframe);
       });
     });
   });
