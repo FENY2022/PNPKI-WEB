@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digital Document Tracking & Management System (DDTMS) - DENR CARAGA</title>
+    <title>Digital Document Tracking & Management System (DDTMS)</title>
     
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -26,7 +26,7 @@
                 <svg class="w-8 h-8 text-blue-700" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                     <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 2a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 5a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
                 </svg>
-                <span class="text-xl font-bold text-blue-800">DDTMS | DENR CARAGA</span>
+                <span class="text-xl font-bold text-blue-800">DDTMS</span>
             </div>
             
             <!-- Desktop Navigation -->
@@ -61,10 +61,10 @@
         <div class="bg-gradient-to-r from-blue-700 to-blue-900 py-20 sm:py-32">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                 <h1 class="text-4xl sm:text-6xl font-extrabold text-white leading-tight mb-4">
-                    DENR CARAGA Digital Document Tracking & Management System (DDTMS)
+                    Digital Document Tracking & Management System (DDTMS)
                 </h1>
                 <p class="text-xl sm:text-2xl text-blue-200 mb-10 max-w-3xl mx-auto">
-                    Streamlining Hierarchical Approvals, Digital Signing, and Archiving for DENR CARAGA Regional Documents.
+                    Streamlining Hierarchical Approvals, Digital Signing, and Archiving for Government Documents.
                 </p>
                 <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
                     <a href="#workflow" class="inline-flex justify-center items-center px-8 py-3 text-base font-medium text-blue-900 bg-white border border-transparent rounded-xl shadow-lg hover:bg-gray-100 transition duration-200 transform hover:scale-[1.02]">
@@ -212,14 +212,14 @@
         <footer class="bg-gray-800 text-white py-12">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                 <div class="flex flex-col md:flex-row justify-between items-center border-b border-gray-700 pb-6 mb-6">
-                    <div class="text-lg font-bold mb-4 md:mb-0">DDTMS: DENR CARAGA Document Tracker</div>
+                    <div class="text-lg font-bold mb-4 md:mb-0">DDTMS: Digital Document Tracker</div>
                     <div class="space-x-4">
                         <a href="#workflow" class="text-gray-400 hover:text-white transition duration-150">Workflow</a>
                         <a href="#features" class="text-gray-400 hover:text-white transition duration-150">Features</a>
                         <a href="#" class="text-gray-400 hover:text-white transition duration-150">Privacy Policy</a>
                     </div>
                 </div>
-                <p class="text-sm text-gray-400">&copy; 2025 DENR CARAGA DDTMS. All rights reserved. Built for streamlined public service.</p>
+                <p class="text-sm text-gray-400">&copy; 2025 DDTMS. All rights reserved. Built for streamlined public service.</p>
             </div>
         </footer>
 
