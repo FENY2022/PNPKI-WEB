@@ -28,7 +28,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($errors)) {
         try {
             // Prepare statement to find user by email
-            // *** MODIFICATION: Added first_name, last_name, role to the SELECT query ***
             $sql = "SELECT user_id, email, password_hash, first_name, last_name, role, status 
                     FROM users WHERE email = ?";
             $stmt = $conn->prepare($sql);
@@ -43,12 +42,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // 5. Verify the password
                 if (password_verify($_POST['password'], $user['password_hash'])) {
                     
-                    // 6. Check account status (using 'active' as per your file)
+                    // 6. Check account status
                     if ($user['status'] == 'active') {
                         // --- SUCCESSFUL LOGIN ---
                         session_regenerate_id(true); // Prevent session fixation
                         
-                        // *** FIX: Store all required user data in session ***
+                        // Store user data in session
                         $_SESSION['user_id'] = $user['user_id'];
                         $_SESSION['email'] = $user['email'];
                         $_SESSION['full_name'] = $user['first_name'] . ' ' . $user['last_name'];
@@ -91,6 +90,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log In - DDTMS DENR CARAGA</title>
+    
+    <link rel="icon" type="image/png" href="logo/icon.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
@@ -148,6 +150,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <main class="flex justify-center items-center py-12 px-4" style="min-height: calc(100vh - 150px);">
         <div class="max-w-md w-full bg-white p-8 sm:p-10 rounded-xl shadow-lg">
+            
+            <div class="flex justify-center mb-6">
+                <img src="logo/icon.png" alt="DDTMS Logo" class="w-20 h-20"> </div>
+
             <h1 class="text-3xl font-bold text-center text-gray-900 mb-6">Log In to Your Account</h1>
             
             <?php if (!empty($errors)): ?>
