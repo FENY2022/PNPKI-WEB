@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Digital Document Tracking & Management System (DDTMS) - DENR CARAGA</title>
 
-    <link rel="icon" type="image/png" href="logo/ddttms.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
@@ -15,6 +15,7 @@
             background-color: #f7fafc; /* Light gray background */
         }
     </style>
+    <link rel="icon" type="image/png" href="logo/icon.png">
 </head>
 <body class="text-gray-800">
 
