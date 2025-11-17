@@ -8,9 +8,9 @@
 // --- 1. Database Configuration Settings ---
 // NOTE: Replace these placeholder values with your actual database credentials.
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'ddtms_db');     // Your database name
-define('DB_USER', 'db_admin');    // Your database user
-define('DB_PASS', 'strong_password_here'); // Your database password
+define('DB_NAME', 'ddts_pnpki');     // Your database name
+define('DB_USER', 'root');    // Your database user
+define('DB_PASS', ''); // Your database password
 
 // --- 2. Connection Initialization ---
 $conn = null; // Initialize the connection variable
