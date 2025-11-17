@@ -152,7 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="max-w-md w-full bg-white p-8 sm:p-10 rounded-xl shadow-lg">
             
             <div class="flex justify-center mb-6">
-                <img src="logo/icon.png" alt="DDTMS Logo" class="w-20 h-20"> </div>
+                <img src="logo/banner.png" alt="DDTMS Logo" class="w-1000 h-30"> </div>
 
             <h1 class="text-3xl font-bold text-center text-gray-900 mb-6">Log In to Your Account</h1>
             

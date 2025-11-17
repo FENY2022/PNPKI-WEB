@@ -187,6 +187,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             padding: 2.5rem; /* p-10 */
             background-color: #f3f4f6; /* bg-gray-100 */
         }
+        /* Style for the file list */
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            background-color: #f9fafb; /* bg-gray-50 */
+            border: 1px solid #e5e7eb; /* border-gray-200 */
+            border-radius: 0.375rem; /* rounded-md */
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -255,10 +266,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
 
                 <div>
-                    <label for="document_files" class="block text-sm font-medium text-gray-700">Upload Document(s) (Up to 10) <span class="text-red-500">*</span></label>
-                    <input type="file" id="document_files" name="document_files[]" required multiple 
-                           class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <label class="block text-sm font-medium text-gray-700">Upload Document(s) (Up to 10) <span class="text-red-500">*</span></label>
+                    
+                    <div id="file-list-container" class="mt-2">
+                        </div>
+                    
+                    <label for="document_files_input" class="mt-2 inline-block cursor-pointer px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100">
+                        + Add File(s)
+                    </label>
+
+                    <input type="file" id="document_files_input" name="document_files[]" multiple required 
+                           class="hidden">
                     <p class="text-xs text-gray-500 mt-1">Allowed types: PDF, DOC, DOCX, XLS, XLSX. Max size: 15MB per file. Max 10 files.</p>
+                    <p id="file-error-msg" class="text-xs text-red-600 mt-1 hidden"></p>
                 </div>
 
                 <div>
@@ -283,27 +303,150 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('document_files_input');
+            const fileListContainer = document.getElementById('file-list-container');
+            const errorMsg = document.getElementById('file-error-msg');
+            const maxFiles = 10;
+            
+            // This DataTransfer object will hold our "master list"
+            const fileStore = new DataTransfer();
+
+            // Handle new files being selected
+            fileInput.addEventListener('change', function(e) {
+                const newFiles = e.target.files;
+                let filesAdded = 0;
+                
+                // Clear any previous errors
+                errorMsg.classList.add('hidden');
+                errorMsg.textContent = '';
+
+                // Add new files to the master list
+                for (let i = 0; i < newFiles.length; i++) {
+                    const file = newFiles[i];
+                    
+                    // Check file limit
+                    if (fileStore.items.length >= maxFiles) {
+                        showError(`Cannot add "${file.name}". Maximum of ${maxFiles} files allowed.`);
+                        break; // Stop adding files
+                    }
+                    
+                    // Check for duplicates
+                    if (!isDuplicate(file)) {
+                        fileStore.items.add(file);
+                        filesAdded++;
+                    }
+                }
+                
+                // Update the input's internal file list
+                fileInput.files = fileStore.files;
+                
+                // Re-render the UI
+                renderFileList();
+
+                // Clear the input's value so 'change' fires again
+                // even if the same file is re-added
+                e.target.value = ''; 
+            });
+
+            function isDuplicate(newFile) {
+                for (let i = 0; i < fileStore.files.length; i++) {
+                    if (fileStore.files[i].name === newFile.name && fileStore.files[i].size === newFile.size) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            function renderFileList() {
+                // Clear the visual list
+                fileListContainer.innerHTML = '';
+                
+                // Update the required attribute
+                if (fileStore.files.length > 0) {
+                    fileInput.required = false;
+                } else {
+                    fileInput.required = true;
+                }
+                
+                // Re-draw the visual list
+                for (let i = 0; i < fileStore.files.length; i++) {
+                    const file = fileStore.files[i];
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-list-item';
+                    
+                    // File name and size
+                    const fileInfo = document.createElement('span');
+                    fileInfo.className = 'text-sm text-gray-700';
+                    fileInfo.textContent = `${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                    
+                    // Remove button
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'ml-4 text-sm font-medium text-red-600 hover:text-red-800';
+                    removeBtn.textContent = 'Remove';
+                    
+                    // Store the index to remove on click
+                    removeBtn.dataset.index = i;
+                    
+                    removeBtn.addEventListener('click', function(e) {
+                        removeFile(i);
+                    });
+                    
+                    fileItem.appendChild(fileInfo);
+                    fileItem.appendChild(removeBtn);
+                    fileListContainer.appendChild(fileItem);
+                }
+            }
+            
+            function removeFile(indexToRemove) {
+                // Create a new DataTransfer object
+                const newFileStore = new DataTransfer();
+                
+                // Add all files *except* the one at indexToRemove
+                for (let i = 0; i < fileStore.files.length; i++) {
+                    if (i !== indexToRemove) {
+                        newFileStore.items.add(fileStore.files[i]);
+                    }
+                }
+                
+                // Replace the old file store with the new one
+                fileStore.items.clear();
+                for (let i = 0; i < newFileStore.files.length; i++) {
+                    fileStore.items.add(newFileStore.files[i]);
+                }
+                
+                // Update the input's internal file list
+                fileInput.files = fileStore.files;
+                
+                // Re-render the UI
+                renderFileList();
+            }
+
+            function showError(message) {
+                errorMsg.textContent = message;
+                errorMsg.classList.remove('hidden');
+            }
+
+            // --- Form Submission Spinner ---
             const docForm = document.getElementById('new-doc-form');
             const submitButton = document.getElementById('submit-button');
             
             if (docForm && submitButton) {
-                docForm.addEventListener('submit', function() {
+                docForm.addEventListener('submit', function(e) {
+                    // Check our file list for the 'required' logic
+                    if (fileStore.files.length === 0) {
+                        e.preventDefault(); // Stop submission
+                        showError('At least one document file is required.');
+                        return;
+                    }
+                    
                     const spinner = submitButton.querySelector('svg');
                     const buttonText = submitButton.querySelector('.button-text');
 
-                    // Check for basic HTML5 validation
-                    if (!docForm.checkValidity()) {
-                        return; // Don't show spinner if form is invalid
-                    }
-
                     // Disable button, show spinner, update text
                     submitButton.disabled = true;
-                    if (spinner) {
-                        spinner.style.display = 'inline-block';
-                    }
-                    if (buttonText) {
-                        buttonText.textContent = 'Submitting...';
-                    }
+                    if (spinner) spinner.style.display = 'inline-block';
+                    if (buttonText) buttonText.textContent = 'Submitting...';
                 });
             }
         });
