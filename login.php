@@ -28,6 +28,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($errors)) {
         try {
             // Prepare statement to find user by email
+            // *** MODIFICATION: Added first_name, last_name, role to the SELECT query ***
             $sql = "SELECT user_id, email, password_hash, first_name, last_name, role, status 
                     FROM users WHERE email = ?";
             $stmt = $conn->prepare($sql);
@@ -42,12 +43,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // 5. Verify the password
                 if (password_verify($_POST['password'], $user['password_hash'])) {
                     
-                    // 6. Check account status
+                    // 6. Check account status (using 'active' as per your file)
                     if ($user['status'] == 'active') {
                         // --- SUCCESSFUL LOGIN ---
                         session_regenerate_id(true); // Prevent session fixation
                         
-                        // Store user data in session
+                        // *** FIX: Store all required user data in session ***
                         $_SESSION['user_id'] = $user['user_id'];
                         $_SESSION['email'] = $user['email'];
                         $_SESSION['full_name'] = $user['first_name'] . ' ' . $user['last_name'];
