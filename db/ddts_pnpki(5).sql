@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 18, 2025 at 06:29 AM
+-- Generation Time: Nov 18, 2025 at 09:23 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -72,6 +72,21 @@ CREATE TABLE `document_files` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `document_signatories`
+--
+
+CREATE TABLE `document_signatories` (
+  `doc_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `signing_order` int(11) NOT NULL,
+  `office_assigned` varchar(255) DEFAULT NULL,
+  `station_assigned` varchar(255) DEFAULT NULL,
+  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -104,7 +119,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`, `profile_picture_path`) VALUES
-(3, 'venzonanthonie@gmail.com', '$2y$10$d86o9GS8gWa5ikqzqeW4.u2hHldY5wFQtTMQSAvRnhpIhPV936twK', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, NULL);
+(3, 'venzonanthonie@gmail.com', '$2y$10$d86o9GS8gWa5ikqzqeW4.u2hHldY5wFQtTMQSAvRnhpIhPV936twK', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, 'uploads/profile_pics/3_d8a0add5e7a4.png');
 
 --
 -- Indexes for dumped tables
@@ -133,6 +148,12 @@ ALTER TABLE `document_files`
   ADD PRIMARY KEY (`file_id`),
   ADD KEY `doc_id` (`doc_id`),
   ADD KEY `uploader_id` (`uploader_id`);
+
+--
+-- Indexes for table `document_signatories`
+--
+ALTER TABLE `document_signatories`
+  ADD PRIMARY KEY (`doc_id`,`signing_order`);
 
 --
 -- Indexes for table `users`
