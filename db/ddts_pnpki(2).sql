@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 17, 2025 at 10:30 AM
+-- Generation Time: Nov 18, 2025 at 03:14 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -92,6 +92,8 @@ CREATE TABLE `users` (
   `status` enum('pending','active','disabled') NOT NULL DEFAULT 'pending',
   `verification_token` varchar(255) DEFAULT NULL,
   `token_expiry` datetime DEFAULT NULL,
+  `reset_token` varchar(255) DEFAULT NULL,
+  `reset_token_expiry` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `otos_userlink` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -100,8 +102,8 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `created_at`, `otos_userlink`) VALUES
-(2, 'venzonanthonie@gmail.com', '$2y$10$KalW9cXfwprxgVGljk2psu23WAEmhy.Oovcr7s5VedzacVpjwsm1K', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Initiator', 'active', NULL, NULL, '2025-11-17 08:49:27', 0);
+INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`) VALUES
+(2, 'venzonanthonie@gmail.com', '$2y$10$KalW9cXfwprxgVGljk2psu23WAEmhy.Oovcr7s5VedzacVpjwsm1K', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Initiator', 'active', NULL, NULL, 'ee50e0968492ca5d0640e901d017c79b426a2eaadc30903623947f8fb62cd2ee', '2025-11-18 04:13:10', '2025-11-17 08:49:27', 0);
 
 --
 -- Indexes for dumped tables
