@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 18, 2025 at 03:14 AM
+-- Generation Time: Nov 18, 2025 at 04:23 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -95,15 +95,16 @@ CREATE TABLE `users` (
   `reset_token` varchar(255) DEFAULT NULL,
   `reset_token_expiry` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `otos_userlink` int(11) NOT NULL
+  `otos_userlink` int(11) NOT NULL,
+  `profile_picture_path` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`) VALUES
-(2, 'venzonanthonie@gmail.com', '$2y$10$KalW9cXfwprxgVGljk2psu23WAEmhy.Oovcr7s5VedzacVpjwsm1K', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Initiator', 'active', NULL, NULL, 'ee50e0968492ca5d0640e901d017c79b426a2eaadc30903623947f8fb62cd2ee', '2025-11-18 04:13:10', '2025-11-17 08:49:27', 0);
+INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`, `profile_picture_path`) VALUES
+(2, 'venzonanthonie@gmail.com', '$2y$10$0KbeLIImPbec0eXEkf34L.lMjK2aZCaysB.r1pxcBDsphu1U3Hr6e', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Initiator', 'active', NULL, NULL, NULL, NULL, '2025-11-17 08:49:27', 0, NULL);
 
 --
 -- Indexes for dumped tables
