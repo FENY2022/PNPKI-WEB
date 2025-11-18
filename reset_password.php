@@ -146,7 +146,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && $user) {
                             <input type="password" id="password" name="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 pr-12">
                             <button type="button" class="absolute inset-y-0 right-0 top-1 pr-3 flex items-center text-sm leading-5 text-blue-600 hover:text-blue-500 font-medium password-toggle" data-target="password">Show</button>
                         </div>
-                    </div>
+                        
+                        <div class="mt-2" id="password-strength-container" style="display: none;">
+                            <div class="h-2 w-full bg-gray-200 rounded-full">
+                                <div id="password-strength-bar" class="h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
+                            </div>
+                            <p id="password-strength-text" class="text-xs mt-1 text-gray-500"></p>
+                        </div>
+                        </div>
                     
                     <div>
                         <label for="password_confirm" class="block text-sm font-medium text-gray-700">Confirm New Password</label>
@@ -189,6 +196,67 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && $user) {
                     if (buttonText) buttonText.textContent = 'Saving...';
                 });
             }
+
+            // ==== NEW: PASSWORD STRENGTH VALIDATOR ====
+            const passwordInput = document.getElementById('password');
+            const strengthContainer = document.getElementById('password-strength-container');
+            const strengthBar = document.getElementById('password-strength-bar');
+            const strengthText = document.getElementById('password-strength-text');
+
+            const strengthLevels = {
+                0: { text: 'Too short (min. 8 characters)', color: 'bg-red-500', width: '10%' },
+                1: { text: 'Weak', color: 'bg-red-500', width: '33%' },
+                2: { text: 'Medium', color: 'bg-yellow-500', width: '66%' },
+                3: { text: 'Strong', color: 'bg-green-500', width: '100%' }
+            };
+
+            function checkPasswordStrength(password) {
+                if (password.length < 8) return 0; // Too short
+
+                const checks = {
+                    lowercase: /[a-z]/.test(password),
+                    uppercase: /[A-Z]/.test(password),
+                    number: /[0-9]/.test(password),
+                    special: /[^A-Za-z0-9]/.test(password) // non-alphanumeric
+                };
+
+                let criteriaMet = 0;
+                if (checks.lowercase) criteriaMet++;
+                if (checks.uppercase) criteriaMet++;
+                if (checks.number) criteriaMet++;
+                if (checks.special) criteriaMet++;
+
+                if (criteriaMet <= 1) return 1; // Weak
+                if (criteriaMet >= 2 && criteriaMet <= 3) return 2; // Medium
+                if (criteriaMet === 4) return 3; // Strong
+                
+                return 1; // Default to weak if logic is missed
+            }
+
+            if (passwordInput) {
+                passwordInput.addEventListener('input', function() {
+                    const password = this.value;
+
+                    if (password.length === 0) {
+                        strengthContainer.style.display = 'none';
+                        return;
+                    }
+                    
+                    strengthContainer.style.display = 'block';
+                    const score = checkPasswordStrength(password);
+                    const level = strengthLevels[score];
+
+                    strengthText.textContent = `Strength: ${level.text}`;
+                    
+                    // Update bar color and width
+                    strengthBar.style.width = level.width;
+                    strengthBar.classList.remove('bg-red-500', 'bg-yellow-500', 'bg-green-500');
+                    strengthBar.classList.add(level.color);
+                });
+            }
+            // ==== END: NEW JAVASCRIPT ====
+
+
             // Password toggle
             document.querySelectorAll('.password-toggle').forEach(toggle => {
                 toggle.addEventListener('click', function() {

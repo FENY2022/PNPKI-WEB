@@ -35,30 +35,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 if ($user['status'] == 'active') {
                     // 1. Generate a secure token
                     $token = bin2hex(random_bytes(32));
-                    $token_expiry = date('Y-m-d H:i:s', time() + 3600); // 1 hour
                     
-                    // 2. Store the token and expiry in the database
-                    $sql_update = "UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE user_id = ?";
+                    // 2. Store the token and expiry in the database using MySQL's clock
+                    // --- THIS IS THE FIX ---
+                    $sql_update = "UPDATE users SET reset_token = ?, reset_token_expiry = DATE_ADD(NOW(), INTERVAL 1 HOUR) WHERE user_id = ?";
                     $stmt_update = $conn->prepare($sql_update);
-                    $stmt_update->bind_param("ssi", $token, $token_expiry, $user['user_id']);
+                    $stmt_update->bind_param("si", $token, $user['user_id']); // Changed from "ssi"
                     $stmt_update->execute();
                     
                     // 3. Send the email
                     $reset_link = "http://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . "/reset_password.php?token=" . $token;
                     
-                    // This new function will be in mail_helper.php (Step 4)
+                    // Pass the reset link to the mail function
                     send_password_reset_email($email, $user['first_name'], $reset_link);
                 }
             }
             // If user not found, or status isn't active, we do nothing.
             
             // MODIFICATION: Add the message to the toast array
-            $toasts[] = ['type' => 'success', 'message' => $success_message];
+            if (!empty($success_message)) {
+                $toasts[] = ['type' => 'success', 'message' => $success_message];
+            }
             
         } catch (Exception $e) {
-            // Log the error, but still show generic success message
+            // TEMPORARY DEBUGGING: Log the error, and show the actual error message
             error_log("Password reset error: " . $e->getMessage());
-            $toasts[] = ['type' => 'success', 'message' => $success_message];
+            // This line will now display the actual error if it occurs after db.php loads successfully
+            $toasts[] = ['type' => 'error', 'message' => "System Error: Failed to process request. Details: " . $e->getMessage()];
         }
     } else {
         // Handle validation errors (e.g., blank email)

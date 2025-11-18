@@ -91,22 +91,18 @@ function send_verification_email($to_email, $first_name, $verification_link) {
 
 /**
  * --------------------------------------------------------------------------
- * Send Password Reset Email
+ * Send Password Reset Email (FIXED SIGNATURE)
  * --------------------------------------------------------------------------
  *
  * Called by forgot_password.php to send the password reset link.
  *
  * @param string $email         The user's email.
  * @param string $firstName     The user's first name.
- * @param string $resetToken    The unique reset token.
+ * @param string $resetLink     The full, unique reset URL. (This is the expected parameter)
  * @return bool                 True on success, false on failure.
  */
-function send_password_reset_email($email, $firstName, $resetToken) {
+function send_password_reset_email($email, $firstName, $resetLink) {
     
-    // Build the reset link for this project
-    // (Assumes reset_password.php is in the same directory)
-    $resetLink = 'http://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/reset_password.php?token=' . urlencode($resetToken);
-
     $subject = 'DDTMS Password Reset Request';
     
     $emailMessage = "Hello " . htmlspecialchars($firstName) . ",\n\n";
