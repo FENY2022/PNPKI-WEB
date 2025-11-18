@@ -8,10 +8,50 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // --- 2. Get User Data from Session ---
-$user_id = $_SESSION['user_id'];
+$user_id = (int)$_SESSION['user_id'];
 $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $email = $_SESSION['email'];
+
+// --- 3. DB Connection (to fetch profile picture) ---
+// Copied from profile.php to ensure consistency
+if (file_exists(__DIR__ . '/config.php')) {
+    require_once __DIR__ . '/config.php'; // should provide $pdo
+} elseif (file_exists(__DIR__ . '/db.php')) {
+    require_once __DIR__ . '/db.php';
+} else {
+    // fallback PDO (local defaults)
+    $dbHost = '127.0.0.1';
+    $dbName = 'ddts_pnpki';
+    $dbUser = 'root';
+    $dbPass = '';
+    $dsn = "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4";
+    try {
+        $pdo = new PDO($dsn, $dbUser, $dbPass, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (Exception $ex) {
+        // Don't die, just fail gracefully for the image
+        $pdo = null; 
+    }
+}
+
+// --- 4. Fetch Profile Picture ---
+$profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
+
+// If not in session or $pdo failed, it will remain null
+if ($pdo && $user_id) {
+    // We check the session first. If it's not set, fetch it and set it.
+    // profile.php will update this session var on change.
+    if ($profile_picture_path === null) { 
+        $stmt = $pdo->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
+        $stmt->execute([$user_id]);
+        $profile_picture_path = $stmt->fetchColumn();
+        $_SESSION['profile_picture_path'] = $profile_picture_path; // Store in session
+    }
+}
+
 
 // Helper: create initials for avatar fallback
 function initials($name) {
@@ -76,20 +116,17 @@ $initials = initials($full_name);
         </div>
     </div>
 
-    <!-- TOPBAR -->
     <header class="bg-white border-b sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 
                 <div class="flex items-center space-x-3">
-                    <!-- mobile toggle -->
                     <button id="sidebarToggle" aria-controls="sidebar" aria-expanded="false" class="lg:hidden p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" title="Toggle sidebar">
                         <svg class="h-6 w-6 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
                         </svg>
                     </button>
 
-                    <!-- Brand -->
                     <a href="dashboard_home.php" target="content_frame" class="flex items-center space-x-2 group" title="Go to dashboard home">
                         <img src="logo/icon.png" alt="logo" class="w-9 h-9 rounded-md object-cover" />
                         <div class="hidden sm:block">
@@ -99,7 +136,6 @@ $initials = initials($full_name);
                     </a>
                 </div>
 
-                <!-- search / actions -->
                 <div class="flex-1 px-4">
                     <div class="max-w-2xl mx-auto">
                         <div class="relative">
@@ -113,9 +149,7 @@ $initials = initials($full_name);
                     </div>
                 </div>
 
-                <!-- Right: notifications + profile -->
                 <div class="flex items-center space-x-3">
-                    <!-- notifications -->
                     <div class="relative">
                         <button id="notifBtn" class="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" title="Notifications" aria-expanded="false" aria-controls="notifMenu">
                             <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -131,7 +165,6 @@ $initials = initials($full_name);
                                 </div>
                             </div>
                             <div class="max-h-56 overflow-auto">
-                                <!-- Example notification items -->
                                 <a href="my_queue.php" target="content_frame" class="block px-4 py-3 hover:bg-gray-50">
                                     <div class="flex items-start space-x-3">
                                         <div class="w-2.5 h-2.5 mt-1 rounded-full bg-blue-500 flex-shrink-0"></div>
@@ -155,11 +188,11 @@ $initials = initials($full_name);
                         </div>
                     </div>
 
-                    <!-- profile -->
                     <div class="relative" id="profileContainer">
                         <button id="profileBtn" class="flex items-center space-x-2 rounded-md p-1 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-haspopup="true" aria-expanded="false" aria-controls="profileMenu">
-                            <?php if (file_exists('logo/profile_default.png')): ?>
-                                <img src="logo/profile_default.png" alt="avatar" class="w-9 h-9 rounded-full object-cover border-2 border-blue-50">
+                            
+                            <?php if (!empty($profile_picture_path) && file_exists($profile_picture_path)): ?>
+                                <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-9 h-9 rounded-full object-cover border-2 border-blue-50">
                             <?php else: ?>
                                 <div class="w-9 h-9 rounded-full avatar-initials"><?php echo $initials; ?></div>
                             <?php endif; ?>
@@ -175,8 +208,9 @@ $initials = initials($full_name);
                         <div id="profileMenu" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-lg card-shadow border border-gray-100 overflow-hidden z-50">
                             <div class="px-4 py-4 bg-blue-50 border-b">
                                 <div class="flex items-center space-x-3">
-                                    <?php if (file_exists('logo/profile_default.png')): ?>
-                                        <img src="logo/profile_default.png" alt="avatar" class="w-12 h-12 rounded-full object-cover border-2 border-blue-600">
+                                    
+                                    <?php if (!empty($profile_picture_path) && file_exists($profile_picture_path)): ?>
+                                        <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-12 h-12 rounded-full object-cover border-2 border-blue-600">
                                     <?php else: ?>
                                         <div class="w-12 h-12 rounded-full avatar-initials text-lg"><?php echo $initials; ?></div>
                                     <?php endif; ?>
@@ -187,7 +221,8 @@ $initials = initials($full_name);
                                     </div>
                                 </div>
                             </div>
-                            <a href="#" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">My Profile</a>
+                            
+                            <a href="profile.php" target="_self" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">My Profile</a>
                             <a href="logout.php" class="block px-4 py-3 text-sm text-red-600 font-semibold hover:bg-red-50">Sign out</a>
                         </div>
                     </div>
@@ -198,7 +233,6 @@ $initials = initials($full_name);
     </header>
 
     <div class="flex h-[calc(100vh-64px)]">
-        <!-- Sidebar -->
         <aside id="sidebar" class="bg-white w-72 border-r hidden lg:flex flex-col card-shadow" style="min-height:0;">
             <div class="p-4 pb-2">
                 <div class="flex items-center justify-between">
@@ -283,7 +317,6 @@ $initials = initials($full_name);
             </div>
         </aside>
 
-        <!-- Mobile sidebar (slide-over) -->
         <div id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 w-72 transform -translate-x-full transition-transform duration-300 lg:hidden">
             <div class="h-full bg-white card-shadow border-r overflow-auto">
                 <div class="p-4 flex items-center justify-between">
@@ -293,7 +326,6 @@ $initials = initials($full_name);
                     </button>
                 </div>
                 <nav class="px-2 pb-6 space-y-1">
-                    <!-- replicate links for mobile -->
                     <a href="dashboard_home.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Dashboard</a>
                     <?php if ($role == 'Initiator'): ?>
                         <a href="new_document.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">New Document</a>
@@ -316,17 +348,16 @@ $initials = initials($full_name);
                         <a href="admin_settings.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Settings</a>
                     <?php endif; ?>
                     <div class="mt-4 px-3 text-sm">
-                        <a href="#" class="block py-2 text-gray-700 hover:bg-gray-50 rounded-md">My Profile</a>
+                        
+                        <a href="profile.php" target="_self" class="block py-2 text-gray-700 hover:bg-gray-50 rounded-md">My Profile</a>
                         <a href="logout.php" class="block py-2 text-red-600 font-semibold hover:bg-red-50 rounded-md">Sign out</a>
                     </div>
                 </nav>
             </div>
         </div>
 
-        <!-- Overlay for mobile sidebar -->
         <div id="mobileBackdrop" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden lg:hidden"></div>
 
-        <!-- MAIN -->
         <main id="mainContent" class="flex-1 h-full">
             <iframe name="content_frame" src="dashboard_home.php" frameborder="0" class="w-full h-full" aria-label="Content frame"></iframe>
         </main>
@@ -393,6 +424,10 @@ $initials = initials($full_name);
         }
         document.querySelectorAll('.sidebar-link, .mobile-link').forEach(link => {
             link.addEventListener('click', function() {
+                // Don't mark profile/logout as active
+                if (this.href.includes('profile.php') || this.href.includes('logout.php')) {
+                    return;
+                }
                 clearActive();
                 this.classList.add('active');
             });
