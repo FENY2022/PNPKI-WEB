@@ -13,45 +13,55 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $email = $_SESSION['email'];
 
-// --- 3. DB Connection (to fetch profile picture) ---
-// Copied from profile.php to ensure consistency
+// --- 3. DB Connection (using MySQLi) ---
+// Note: This uses the fallback credentials defined in the original file.
+// If your project uses config.php or db.php, ensure those files provide a $conn MySQLi instance.
+$conn = null;
 if (file_exists(__DIR__ . '/config.php')) {
-    require_once __DIR__ . '/config.php'; // should provide $pdo
+    // Assuming config.php/db.php provides a $conn MySQLi instance.
+    require_once __DIR__ . '/config.php';
 } elseif (file_exists(__DIR__ . '/db.php')) {
     require_once __DIR__ . '/db.php';
 } else {
-    // fallback PDO (local defaults)
+    // fallback MySQLi connection (local defaults)
     $dbHost = '127.0.0.1';
     $dbName = 'ddts_pnpki';
     $dbUser = 'root';
     $dbPass = '';
-    $dsn = "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4";
-    try {
-        $pdo = new PDO($dsn, $dbUser, $dbPass, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-    } catch (Exception $ex) {
-        // Don't die, just fail gracefully for the image
-        $pdo = null; 
+    
+    // Establishing connection
+    $conn = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
+    
+    // Check connection
+    if ($conn->connect_error) {
+        // Fail gracefully for the image fetch if connection fails
+        $conn = null; 
     }
 }
 
-// --- 4. Fetch Profile Picture ---
+// --- 4. Fetch Profile Picture (Using MySQLi) ---
 $profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
 
-// If not in session or $pdo failed, it will remain null
-if ($pdo && $user_id) {
-    // We check the session first. If it's not set, fetch it and set it.
-    // profile.php will update this session var on change.
-    if ($profile_picture_path === null) { 
-        $stmt = $pdo->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
-        $stmt->execute([$user_id]);
-        $profile_picture_path = $stmt->fetchColumn();
-        $_SESSION['profile_picture_path'] = $profile_picture_path; // Store in session
+// If not in session and connection is successful, fetch it.
+if ($conn && $user_id && $profile_picture_path === null) {
+    
+    // Prepare statement to prevent SQL injection
+    $stmt = $conn->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
+    
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id); // 'i' for integer
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $profile_picture_path = $row['profile_picture_path'];
+            $_SESSION['profile_picture_path'] = $profile_picture_path; // Store in session
+        }
+        
+        $stmt->close();
     }
 }
-
 
 // Helper: create initials for avatar fallback
 function initials($name) {
@@ -64,6 +74,12 @@ function initials($name) {
     return strtoupper($initials ?: "U");
 }
 $initials = initials($full_name);
+
+// Close connection if it was successfully opened
+if ($conn instanceof mysqli && !empty($conn->thread_id)) {
+    // Only close if the connection was established and we are not expecting it to be used later in the script (which we aren't, as content loads via iframe)
+    $conn->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -73,77 +89,97 @@ $initials = initials($full_name);
     <title>Dashboard - DDTMS DENR CARAGA</title>
     <link rel="icon" type="image/png" href="logo/icon.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 
     <style>
+        /* Import Inter for consistency with original. Use Poppins if preferred, but Inter looks good here. */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         html, body { height: 100%; }
-        body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; }
+        body { 
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; 
+            background-color: #f7f9fc; /* Light background for modern feel */
+        }
 
         /* Preloader */
         #preloader {
             position: fixed; inset: 0;
             display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(180deg, rgba(243,244,246,0.96), rgba(255,255,255,0.96));
+            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,247,255,0.98));
             z-index: 60; transition: opacity .35s ease;
         }
         #preloader.hidden { opacity: 0; pointer-events: none; }
 
-        /* Subtle card shadow */
-        .card-shadow { box-shadow: 0 8px 22px rgba(15,23,42,0.06); }
+        /* Enhanced Card Shadow */
+        .card-shadow { box-shadow: 0 10px 30px rgba(15,23,42,0.08); }
 
         /* Sidebar active */
         .sidebar-link.active {
-            background: linear-gradient(90deg, rgba(238,242,255,1), rgba(245,247,255,1));
-            color: #312e81; font-weight: 600;
+            background-color: #e0f2fe; /* Light blue background */
+            color: #1d4ed8; /* Darker blue text */
+            font-weight: 600;
+            border-left: 4px solid #3b82f6; /* Accent border */
+            padding-left: 12px !important;
+        }
+        .sidebar-link {
+            transition: all 0.15s ease;
+            border-left: 4px solid transparent;
+        }
+        .sidebar-link:hover {
+            background-color: #f3f4f6;
         }
 
         /* Smooth transition for iframe resize */
         iframe { transition: height .12s ease; }
 
-        /* Avatar initials styling in case no image */
+        /* Avatar initials styling */
         .avatar-initials {
             display: inline-flex; align-items:center; justify-content:center;
-            background: #e0e7ff; color:#312e81; font-weight:700;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); 
+            color: white; 
+            font-weight: 600;
+        }
+
+        /* Header buttons focus ring */
+        .header-btn:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
         }
     </style>
 </head>
-<body class="bg-gray-50 h-full antialiased text-gray-700">
+<body class="h-full antialiased text-gray-700">
 
     <div id="preloader">
         <div class="flex flex-col items-center space-y-3">
-            <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600"></div>
-            <div class="text-sm text-gray-600">Preparing your workspace…</div>
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-indigo-600"></div>
+            <div class="text-sm font-medium text-gray-600">Loading Dashboard…</div>
         </div>
     </div>
 
-    <header class="bg-white border-b sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header class="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 
-                <div class="flex items-center space-x-3">
-                    <button id="sidebarToggle" aria-controls="sidebar" aria-expanded="false" class="lg:hidden p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" title="Toggle sidebar">
-                        <svg class="h-6 w-6 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
-                        </svg>
+                <div class="flex items-center space-x-4">
+                    <button id="sidebarToggle" aria-controls="sidebar" aria-expanded="false" class="lg:hidden p-2 rounded-full text-indigo-700 hover:bg-gray-100 focus:ring-indigo-500 header-btn" title="Toggle sidebar">
+                        <i class="fas fa-bars h-5 w-5"></i>
                     </button>
 
-                    <a href="dashboard_home.php" target="content_frame" class="flex items-center space-x-2 group" title="Go to dashboard home">
-                        <img src="logo/icon.png" alt="logo" class="w-9 h-9 rounded-md object-cover" />
+                    <a href="dashboard_home.php" target="content_frame" class="flex items-center space-x-3 group" title="Go to dashboard home">
+                        <img src="logo/icon.png" alt="logo" class="w-8 h-8 rounded-full object-cover shadow-sm" />
                         <div class="hidden sm:block">
-                            <div class="text-sm font-bold text-blue-800">DDTMS</div>
-                            <div class="text-xs text-gray-500 -mt-0.5">DENR CARAGA</div>
+                            <div class="text-lg font-bold text-indigo-700">DDTMS</div>
+                            <div class="text-xs text-gray-500 -mt-1">DENR CARAGA</div>
                         </div>
                     </a>
                 </div>
 
-                <div class="flex-1 px-4">
+                <div class="flex-1 px-4 hidden md:block">
                     <div class="max-w-2xl mx-auto">
                         <div class="relative">
-                            <input id="globalSearch" type="search" placeholder="Search documents, users, actions..." class="w-full border bg-white border-gray-200 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
-                            <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                                <svg class="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10.5 18A7.5 7.5 0 1010.5 3a7.5 7.5 0 000 15z" />
-                                </svg>
+                            <input id="globalSearch" type="search" placeholder="Search documents, users, actions..." class="w-full border bg-gray-50 border-gray-200 rounded-full py-2.5 pl-12 pr-6 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all duration-200" />
+                            <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                                <i class="fas fa-search w-4 h-4 text-gray-400"></i>
                             </div>
                         </div>
                     </div>
@@ -151,79 +187,77 @@ $initials = initials($full_name);
 
                 <div class="flex items-center space-x-3">
                     <div class="relative">
-                        <button id="notifBtn" class="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" title="Notifications" aria-expanded="false" aria-controls="notifMenu">
-                            <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                            </svg>
-                            <span id="notifBadge" class="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white">3</span>
+                        <button id="notifBtn" class="header-btn p-2 rounded-full text-gray-600 hover:bg-gray-100 focus:ring-blue-500" title="Notifications" aria-expanded="false" aria-controls="notifMenu">
+                            <i class="fas fa-bell h-5 w-5"></i>
+                            <span id="notifBadge" class="absolute top-0.5 right-0.5 inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white transform translate-x-1/2 -translate-y-1/2">3</span>
                         </button>
-                        <div id="notifMenu" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg card-shadow overflow-hidden border border-gray-100 z-50">
-                            <div class="px-4 py-3 border-b bg-gray-50">
-                                <div class="flex items-center justify-between">
-                                    <div class="text-sm font-semibold">Notifications</div>
-                                    <button id="markAllRead" class="text-xs text-blue-600 hover:underline">Mark all read</button>
-                                </div>
+                        <div id="notifMenu" class="hidden absolute right-0 mt-3 w-80 bg-white rounded-xl shadow-xl overflow-hidden border border-gray-100 z-50">
+                            <div class="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+                                <div class="text-sm font-semibold text-gray-800">Notifications (3)</div>
+                                <button id="markAllRead" class="text-xs text-indigo-600 hover:underline">Mark all read</button>
                             </div>
                             <div class="max-h-56 overflow-auto">
-                                <a href="my_queue.php" target="content_frame" class="block px-4 py-3 hover:bg-gray-50">
+                                <a href="my_queue.php" target="content_frame" class="block px-4 py-3 hover:bg-gray-50 transition-colors border-b">
                                     <div class="flex items-start space-x-3">
-                                        <div class="w-2.5 h-2.5 mt-1 rounded-full bg-blue-500 flex-shrink-0"></div>
+                                        <i class="fas fa-check-double mt-1 text-blue-500 flex-shrink-0"></i>
                                         <div>
                                             <div class="text-sm font-medium text-gray-800">You have 2 new items in your queue</div>
-                                            <div class="text-xs text-gray-500">Section Chief • 2h</div>
+                                            <div class="text-xs text-gray-500 mt-0.5">Section Chief • 2 hours ago</div>
                                         </div>
                                     </div>
                                 </a>
-                                <a href="completed_docs.php" target="content_frame" class="block px-4 py-3 hover:bg-gray-50">
+                                <a href="completed_docs.php" target="content_frame" class="block px-4 py-3 hover:bg-gray-50 transition-colors border-b">
                                     <div class="flex items-start space-x-3">
-                                        <div class="w-2.5 h-2.5 mt-1 rounded-full bg-green-400 flex-shrink-0"></div>
+                                        <i class="fas fa-file-signature mt-1 text-green-500 flex-shrink-0"></i>
                                         <div>
                                             <div class="text-sm font-medium text-gray-800">Document #123 has been signed</div>
-                                            <div class="text-xs text-gray-500">Records Office • 1d</div>
+                                            <div class="text-xs text-gray-500 mt-0.5">Records Office • 1 day ago</div>
                                         </div>
                                     </div>
                                 </a>
-                                <div class="p-4 text-xs text-gray-400">No more notifications</div>
+                                <div class="p-4 text-xs text-center text-gray-400">No more notifications</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="relative" id="profileContainer">
-                        <button id="profileBtn" class="flex items-center space-x-2 rounded-md p-1 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-haspopup="true" aria-expanded="false" aria-controls="profileMenu">
+                        <button id="profileBtn" class="header-btn flex items-center space-x-3 rounded-full p-1.5 hover:bg-gray-100 focus:ring-blue-500" aria-haspopup="true" aria-expanded="false" aria-controls="profileMenu">
                             
                             <?php if (!empty($profile_picture_path) && file_exists($profile_picture_path)): ?>
-                                <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-9 h-9 rounded-full object-cover border-2 border-blue-50">
+                                <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-9 h-9 rounded-full object-cover border-2 border-indigo-200">
                             <?php else: ?>
-                                <div class="w-9 h-9 rounded-full avatar-initials"><?php echo $initials; ?></div>
+                                <div class="w-9 h-9 rounded-full avatar-initials text-sm"><?php echo $initials; ?></div>
                             <?php endif; ?>
-                            <div class="hidden sm:flex sm:flex-col sm:items-start">
+                            <div class="hidden md:flex md:flex-col md:items-start">
                                 <div class="text-sm font-medium text-gray-800 leading-4"><?php echo htmlspecialchars($full_name); ?></div>
                                 <div class="text-xs text-gray-500 leading-3"><?php echo htmlspecialchars($role); ?></div>
                             </div>
-                            <svg class="w-4 h-4 text-gray-500 hidden sm:block" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
+                            <i class="fas fa-chevron-down w-3 h-3 text-gray-500 hidden md:block"></i>
                         </button>
 
-                        <div id="profileMenu" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-lg card-shadow border border-gray-100 overflow-hidden z-50">
-                            <div class="px-4 py-4 bg-blue-50 border-b">
+                        <div id="profileMenu" class="hidden absolute right-0 mt-3 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50">
+                            <div class="px-5 py-4 bg-indigo-50 border-b">
                                 <div class="flex items-center space-x-3">
                                     
                                     <?php if (!empty($profile_picture_path) && file_exists($profile_picture_path)): ?>
-                                        <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-12 h-12 rounded-full object-cover border-2 border-blue-600">
+                                        <img src="<?php echo htmlspecialchars($profile_picture_path); ?>" alt="avatar" class="w-12 h-12 rounded-full object-cover border-2 border-indigo-600">
                                     <?php else: ?>
-                                        <div class="w-12 h-12 rounded-full avatar-initials text-lg"><?php echo $initials; ?></div>
+                                        <div class="w-12 h-12 rounded-full avatar-initials text-xl"><?php echo $initials; ?></div>
                                     <?php endif; ?>
                                     <div>
-                                        <div class="text-sm font-semibold text-blue-900"><?php echo htmlspecialchars($full_name); ?></div>
+                                        <div class="text-sm font-semibold text-indigo-900"><?php echo htmlspecialchars($full_name); ?></div>
                                         <div class="text-xs text-gray-500"><?php echo htmlspecialchars($email); ?></div>
-                                        <div class="text-xs text-blue-600 font-medium mt-1"><?php echo htmlspecialchars($role); ?></div>
+                                        <div class="text-xs text-indigo-600 font-medium mt-1"><?php echo htmlspecialchars($role); ?></div>
                                     </div>
                                 </div>
                             </div>
                             
-                            <a href="profile.php" target="_self" class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">My Profile</a>
-                            <a href="logout.php" class="block px-4 py-3 text-sm text-red-600 font-semibold hover:bg-red-50">Sign out</a>
+                            <a href="profile.php" target="content_frame" class="block px-5 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                                <i class="fas fa-user-circle w-4 mr-2 text-gray-400"></i> My Profile
+                            </a>
+                            <a href="logout.php" class="block px-5 py-3 text-sm text-red-600 font-semibold hover:bg-red-50 transition-colors border-t border-gray-100">
+                                <i class="fas fa-sign-out-alt w-4 mr-2"></i> Sign out
+                            </a>
                         </div>
                     </div>
 
@@ -233,100 +267,99 @@ $initials = initials($full_name);
     </header>
 
     <div class="flex h-[calc(100vh-64px)]">
-        <aside id="sidebar" class="bg-white w-72 border-r hidden lg:flex flex-col card-shadow" style="min-height:0;">
+        <aside id="sidebar" class="bg-white w-72 border-r border-gray-100 hidden lg:flex flex-col shadow-xl" style="min-height:0;">
             <div class="p-4 pb-2">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Navigation</div>
-                    <button id="collapseSidebarBtn" class="p-1 rounded-md hover:bg-gray-100 focus:outline-none" title="Collapse sidebar">
-                        <svg class="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9l6 6 6-6"/>
-                        </svg>
+                    <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">NAVIGATION</div>
+                    <button id="collapseSidebarBtn" class="p-1 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none" title="Collapse sidebar">
+                        <i class="fas fa-chevron-left w-4 h-4 transition-transform duration-200"></i>
                     </button>
                 </div>
             </div>
 
-            <nav class="px-2 pb-6 overflow-auto space-y-1 flex-1">
-                <a href="dashboard_home.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                    <svg class="w-5 h-5 text-blue-600 group-hover:text-blue-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M13 5v14"/></svg>
+            <nav class="px-3 pb-6 overflow-auto space-y-1 flex-1">
+                <a href="dashboard_home.php" target="content_frame" class="sidebar-link active group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700">
+                    <i class="fas fa-home w-5 h-5 text-blue-600 group-hover:text-blue-700"></i>
                     <span>Dashboard</span>
                 </a>
 
-                <div class="mt-3 px-3 text-xs text-gray-500 uppercase tracking-wide">Workflow</div>
+                <div class="mt-4 pt-2 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-t border-gray-100">Workflow</div>
 
                 <?php if ($role == 'Initiator'): ?>
-                    <a href="new_document.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-green-500 group-hover:text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <a href="new_document.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-file-upload w-5 h-5 text-green-500 group-hover:text-green-600"></i>
                         <span>New Document</span>
                     </a>
                 <?php endif; ?>
 
                 <?php if (in_array($role, ['Section Chief', 'Division Chief', 'ARD', 'RED'])): ?>
-                    <a href="my_queue.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-yellow-500 group-hover:text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    <a href="my_queue.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-list-alt w-5 h-5 text-yellow-500 group-hover:text-yellow-600"></i>
                         <span>My Action Queue</span>
                     </a>
                 <?php endif; ?>
 
                 <?php if (in_array($role, ['Initiator', 'Section Chief'])): ?>
-                    <a href="my_drafts.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-indigo-500 group-hover:text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4z"/></svg>
+                    <a href="my_drafts.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-edit w-5 h-5 text-indigo-500 group-hover:text-indigo-600"></i>
                         <span>My Drafts</span>
                     </a>
                 <?php endif; ?>
 
                 <?php if (in_array($role, ['Section Chief', 'Division Chief'])): ?>
-                    <a href="returned_docs.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-orange-500 group-hover:text-orange-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h13"/></svg>
+                    <a href="returned_docs.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-reply w-5 h-5 text-orange-500 group-hover:text-orange-600"></i>
                         <span>Returned Documents</span>
                     </a>
                 <?php endif; ?>
 
-                <div class="mt-4 px-3 text-xs text-gray-500 uppercase tracking-wide">Archive</div>
+                <div class="mt-4 pt-2 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-t border-gray-100">Archive & Management</div>
 
                 <?php if ($role == 'Records Office'): ?>
-                    <a href="records_management.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-pink-500 group-hover:text-pink-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405M19 13V7a2 2 0 00-2-2h-4a2 2 0 00-2 2v6"/></svg>
+                    <a href="records_management.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-archive w-5 h-5 text-pink-500 group-hover:text-pink-600"></i>
                         <span>Records Management</span>
                     </a>
                 <?php endif; ?>
 
-                <a href="completed_docs.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                    <svg class="w-5 h-5 text-teal-500 group-hover:text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <a href="completed_docs.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                    <i class="fas fa-check-circle w-5 h-5 text-teal-500 group-hover:text-teal-600"></i>
                     <span>Completed</span>
                 </a>
 
                 <?php if ($role == 'Admin'): ?>
-                    <div class="mt-4 px-3 text-xs text-gray-500 uppercase tracking-wide">Admin</div>
-                    <a href="admin_users.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-gray-600 group-hover:text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 21v-2a4 4 0 00-3-3.87M4 6V4a2 2 0 012-2h8a2 2 0 012 2v2"/></svg>
+                    <div class="mt-4 pt-2 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider border-t border-gray-100">Admin Tools</div>
+                    <a href="admin_users.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-users-cog w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>User Management</span>
                     </a>
-                    <a href="admin_settings.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">
-                        <svg class="w-5 h-5 text-gray-600 group-hover:text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/></svg>
+                    <a href="admin_settings.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-cogs w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>Settings</span>
                     </a>
                 <?php endif; ?>
 
             </nav>
 
-            <div class="px-4 py-3 border-t text-xs text-gray-500">
+            <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
                 <div class="flex items-center justify-between">
-                    <div>Signed in as</div>
-                    <div class="font-medium text-gray-800"><?php echo htmlspecialchars($full_name); ?></div>
+                    <div>User Role:</div>
+                    <div class="font-semibold text-gray-800"><?php echo htmlspecialchars($role); ?></div>
                 </div>
             </div>
         </aside>
 
         <div id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 w-72 transform -translate-x-full transition-transform duration-300 lg:hidden">
-            <div class="h-full bg-white card-shadow border-r overflow-auto">
-                <div class="p-4 flex items-center justify-between">
-                    <div class="text-sm font-semibold text-gray-700">Menu</div>
-                    <button id="closeMobileSidebar" class="p-1 rounded-md hover:bg-gray-100 focus:outline-none" title="Close">
-                        <svg class="w-5 h-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            <div class="h-full bg-white shadow-xl border-r overflow-auto">
+                <div class="p-4 flex items-center justify-between border-b">
+                    <div class="text-sm font-semibold text-gray-700">DDTMS Menu</div>
+                    <button id="closeMobileSidebar" class="p-1 rounded-md hover:bg-gray-100 text-gray-600 focus:outline-none" title="Close">
+                        <i class="fas fa-times w-5 h-5"></i>
                     </button>
                 </div>
                 <nav class="px-2 pb-6 space-y-1">
                     <a href="dashboard_home.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Dashboard</a>
+                    <div class="mt-3 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Workflow</div>
                     <?php if ($role == 'Initiator'): ?>
                         <a href="new_document.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">New Document</a>
                     <?php endif; ?>
@@ -339,17 +372,19 @@ $initials = initials($full_name);
                     <?php if (in_array($role, ['Section Chief', 'Division Chief'])): ?>
                         <a href="returned_docs.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Returned Documents</a>
                     <?php endif; ?>
+                    <div class="mt-3 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Archive & Management</div>
                     <?php if ($role == 'Records Office'): ?>
                         <a href="records_management.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Records Management</a>
                     <?php endif; ?>
                     <a href="completed_docs.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Completed</a>
                     <?php if ($role == 'Admin'): ?>
+                        <div class="mt-3 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Admin Tools</div>
                         <a href="admin_users.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">User Management</a>
                         <a href="admin_settings.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Settings</a>
                     <?php endif; ?>
-                    <div class="mt-4 px-3 text-sm">
+                    <div class="mt-4 px-3 text-sm border-t pt-4">
                         
-                        <a href="profile.php" target="_self" class="block py-2 text-gray-700 hover:bg-gray-50 rounded-md">My Profile</a>
+                        <a href="profile.php" target="content_frame" class="mobile-link block py-2 text-gray-700 hover:bg-gray-50 rounded-md">My Profile</a>
                         <a href="logout.php" class="block py-2 text-red-600 font-semibold hover:bg-red-50 rounded-md">Sign out</a>
                     </div>
                 </nav>
@@ -358,8 +393,8 @@ $initials = initials($full_name);
 
         <div id="mobileBackdrop" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden lg:hidden"></div>
 
-        <main id="mainContent" class="flex-1 h-full">
-            <iframe name="content_frame" src="dashboard_home.php" frameborder="0" class="w-full h-full" aria-label="Content frame"></iframe>
+        <main id="mainContent" class="flex-1 h-full overflow-y-auto">
+            <iframe name="content_frame" src="dashboard_home.php" frameborder="0" class="w-full h-full bg-white" aria-label="Content frame"></iframe>
         </main>
     </div>
 
@@ -401,25 +436,48 @@ $initials = initials($full_name);
         const sidebar = document.getElementById('sidebar');
         let collapsed = false;
         if (collapseBtn) {
+            const collapseIcon = collapseBtn.querySelector('i');
             collapseBtn.addEventListener('click', () => {
                 collapsed = !collapsed;
                 if (collapsed) {
                     sidebar.classList.add('w-20');
                     sidebar.classList.remove('w-72');
+                    collapseIcon.classList.replace('fa-chevron-left', 'fa-chevron-right');
                     document.querySelectorAll('#sidebar .sidebar-link span').forEach(s => s.classList.add('hidden'));
-                    document.querySelectorAll('#sidebar .sidebar-link svg').forEach(svg => svg.classList.add('mx-auto'));
+                    document.querySelectorAll('#sidebar .sidebar-link').forEach(l => {
+                        l.classList.add('justify-center');
+                        l.classList.remove('justify-start');
+                        l.classList.add('px-0');
+                    });
+                    document.querySelectorAll('#sidebar .sidebar-link i').forEach(i => i.classList.remove('w-5'));
+                    document.querySelectorAll('#sidebar .sidebar-link').forEach(l => l.style.borderLeft = 'none');
+                    document.querySelectorAll('#sidebar .sidebar-link.active').forEach(l => l.style.borderLeft = 'none');
+                    document.querySelectorAll('#sidebar .font-bold.text-gray-500').forEach(t => t.classList.add('hidden'));
+                    document.querySelector('#sidebar .border-t.text-xs').classList.add('hidden');
                 } else {
                     sidebar.classList.remove('w-20');
                     sidebar.classList.add('w-72');
+                    collapseIcon.classList.replace('fa-chevron-right', 'fa-chevron-left');
                     document.querySelectorAll('#sidebar .sidebar-link span').forEach(s => s.classList.remove('hidden'));
-                    document.querySelectorAll('#sidebar .sidebar-link svg').forEach(svg => svg.classList.remove('mx-auto'));
+                    document.querySelectorAll('#sidebar .sidebar-link').forEach(l => {
+                        l.classList.remove('justify-center');
+                        l.classList.add('justify-start');
+                        l.classList.remove('px-0');
+                    });
+                    document.querySelectorAll('#sidebar .sidebar-link i').forEach(i => i.classList.add('w-5'));
+                    document.querySelectorAll('#sidebar .sidebar-link.active').forEach(l => l.style.borderLeft = '4px solid #3b82f6');
+                    document.querySelectorAll('#sidebar .font-bold.text-gray-500').forEach(t => t.classList.remove('hidden'));
+                    document.querySelector('#sidebar .border-t.text-xs').classList.remove('hidden');
                 }
             });
         }
 
         // Active link handling for both desktop and mobile links
         function clearActive() {
-            document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.sidebar-link').forEach(l => {
+                l.classList.remove('active');
+                l.style.borderLeft = '4px solid transparent';
+            });
             document.querySelectorAll('.mobile-link').forEach(l => l.classList.remove('active'));
         }
         document.querySelectorAll('.sidebar-link, .mobile-link').forEach(link => {
@@ -430,13 +488,15 @@ $initials = initials($full_name);
                 }
                 clearActive();
                 this.classList.add('active');
+                if (!collapsed) {
+                    this.style.borderLeft = '4px solid #3b82f6';
+                }
             });
         });
 
         // Notifications dropdown
         const notifBtn = document.getElementById('notifBtn');
         const notifMenu = document.getElementById('notifMenu');
-        const notifBadge = document.getElementById('notifBadge');
         if (notifBtn && notifMenu) {
             notifBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -468,6 +528,7 @@ $initials = initials($full_name);
 
         // Mark all notifications read (example action)
         const markAllRead = document.getElementById('markAllRead');
+        const notifBadge = document.getElementById('notifBadge');
         if (markAllRead && notifBadge) {
             markAllRead.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -508,7 +569,11 @@ $initials = initials($full_name);
         const iframe = document.querySelector('iframe[name="content_frame"]');
         function resizeFrame() {
             if (!iframe) return;
-            iframe.style.height = (window.innerHeight - document.querySelector('header').offsetHeight) + 'px';
+            // Calculate main content height (viewport height - header height)
+            const headerHeight = document.querySelector('header').offsetHeight;
+            const targetHeight = window.innerHeight - headerHeight;
+            iframe.style.height = targetHeight + 'px';
+            document.getElementById('mainContent').style.height = targetHeight + 'px';
         }
         window.addEventListener('resize', resizeFrame);
         window.addEventListener('load', resizeFrame);
@@ -521,6 +586,16 @@ $initials = initials($full_name);
                 if (!notifMenu.classList.contains('hidden')) notifMenu.classList.add('hidden');
                 if (!profileMenu.classList.contains('hidden')) profileMenu.classList.add('hidden');
                 if (!mobileBackdrop.classList.contains('hidden')) closeMobile();
+            }
+        });
+        
+        // Ensure the initial dashboard link is marked active on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const dashboardLink = document.querySelector('a[href="dashboard_home.php"][target="content_frame"]');
+            if (dashboardLink) {
+                clearActive();
+                dashboardLink.classList.add('active');
+                dashboardLink.style.borderLeft = '4px solid #3b82f6';
             }
         });
     </script>
