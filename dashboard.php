@@ -333,10 +333,11 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <i class="fas fa-users-cog w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>User Management</span>
                     </a>
-<a href="signat_path.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-    <i class="fas fa-route w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
-    <span>Signatory Path</span>
-</a>
+                    
+                    <a href="signat_path.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-route w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
+                        <span>Signatory Path</span>
+                    </a>
 
 
                     
