@@ -333,21 +333,15 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <i class="fas fa-users-cog w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>User Management</span>
                     </a>
-                    
-                    <a href="signat_path.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        <i class="fas fa-route w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
-                        <span>Signatory Path</span>
-                    </a>
-
-
-                    
                     <a href="admin_settings.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
                         <i class="fas fa-cogs w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>Settings</span>
                     </a>
 
-
-
+                    <a href="signat_path.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-route w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
+                        <span>Signatory Path</span>
+                                </a>
                     
                 <?php endif; ?>
 
@@ -393,6 +387,9 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <div class="mt-3 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Admin Tools</div>
                         <a href="admin_users.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">User Management</a>
                         <a href="admin_settings.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Settings</a>
+                        <a href="signat_path.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Signatory Path</a>
+
+
                     <?php endif; ?>
                     <div class="mt-4 px-3 text-sm border-t pt-4">
                         
