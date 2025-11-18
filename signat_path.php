@@ -16,6 +16,22 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+// Create document_signatories table if it doesn't exist
+$sql = "SHOW TABLES LIKE 'document_signatories'";
+$result = $conn->query($sql);
+if ($result->num_rows == 0) {
+    $create_sql = "CREATE TABLE document_signatories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        doc_id INT NOT NULL,
+        user_id INT NOT NULL,
+        signing_order INT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES useremployee(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
+    if ($conn->query($create_sql) !== TRUE) {
+        die("Error creating table: " . $conn->error);
+    }
+}
+
 // Set timezone
 date_default_timezone_set('Asia/Manila');
 
@@ -31,16 +47,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['doc_id']) && isset($_P
     $signatory_ids = array_filter(array_map('intval', explode(',', $signatory_path_str)));
 
     if ($doc_id_to_save <= 0) {
-        $message = '<div class="alert error">❌ Error: Invalid Document ID provided.</div>';
+        $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: Invalid Document ID provided.</div>';
     } elseif (empty($signatory_ids)) {
-        $message = '<div class="alert error">❌ Error: No signatories were selected for the path.</div>';
+        $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: No signatories were selected for the path.</div>';
     } else {
         
         // Start a transaction for atomicity
         $conn->begin_transaction();
         try {
             // A. Delete any existing path for this document (Assumes 'document_signatories' table)
-            // NOTE: Using doc_id and simple user_id insert as per user's provided code structure.
             $stmt_delete = $conn->prepare("DELETE FROM document_signatories WHERE doc_id = ?");
             $stmt_delete->bind_param("i", $doc_id_to_save);
             $stmt_delete->execute();
@@ -48,9 +63,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['doc_id']) && isset($_P
 
             // B. Insert the new path sequence
             $order = 1;
-            // The table structure in your previous request included office_assigned and station_assigned.
-            // If you are using the simpler table from the code you just provided (doc_id, user_id, signing_order), 
-            // you must adjust the query below. I am using the simplest query to match your provided code.
+            // Using the simplest query to match the provided PHP submission logic
             $stmt_insert = $conn->prepare("INSERT INTO document_signatories (doc_id, user_id, signing_order) VALUES (?, ?, ?)");
 
             foreach ($signatory_ids as $user_id) {
@@ -63,11 +76,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['doc_id']) && isset($_P
 
             $stmt_insert->close();
             $conn->commit();
-            $message = '<div class="alert success">✅ Signatory path successfully set for Document ID: <strong>' . $doc_id_to_save . '</strong></div>';
+            $message = '<div class="alert success"><i class="fas fa-check-circle"></i> Signatory path successfully set for Document ID: <strong>' . $doc_id_to_save . '</strong></div>';
 
         } catch (Exception $e) {
             $conn->rollback();
-            $message = '<div class="alert error">❌ Failed to set signatory path. Database Error.</div>';
+            $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Failed to set signatory path. ' . $e->getMessage() . '</div>';
             error_log("Signatory Path Save Error: " . $e->getMessage());
         }
     }
@@ -157,7 +170,7 @@ $conn->close();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Set Document Signatory Path</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"> 
     <style>
         :root {
             --primary: #4361ee;
@@ -239,6 +252,7 @@ $conn->close();
             padding: 30px 40px;
         }
 
+        /* --- Alerts --- */
         .alert {
             padding: 16px 20px;
             border-radius: 12px;
@@ -262,17 +276,14 @@ $conn->close();
             border-left-color: var(--danger);
         }
 
+        /* --- Card Styling --- */
         .card {
             background: white;
             border-radius: 12px;
             box-shadow: var(--card-shadow);
             padding: 24px;
             margin-bottom: 24px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .card:hover {
-            box-shadow: var(--hover-shadow);
+            border: 1px solid var(--border); /* Added subtle border */
         }
 
         .card-title {
@@ -283,16 +294,11 @@ $conn->close();
             display: flex;
             align-items: center;
             gap: 10px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
         }
 
-        .card-title i {
-            font-size: 1.2rem;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
+        /* --- Form Elements --- */
         .form-label {
             display: block;
             font-weight: 500;
@@ -335,65 +341,24 @@ $conn->close();
             padding: 12px 24px;
             border: none;
             border-radius: 10px;
-            font-weight: 500;
+            font-weight: 600;
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
         }
 
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
+        /* Button Colors (Updated to be more vibrant/modern) */
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--secondary); transform: translateY(-1px); }
+        .btn-success { background: var(--success-dark); color: white; }
+        .btn-success:hover { background: #2a75f0; transform: translateY(-1px); }
+        .btn-outline { background: transparent; color: var(--gray); border: 1.5px solid var(--border); }
+        .btn-outline:hover { background: var(--light); color: var(--dark); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #e11573; transform: translateY(-1px); }
 
-        .btn-primary:hover {
-            background: var(--secondary);
-            transform: translateY(-2px);
-        }
-
-        .btn-success {
-            background: var(--success-dark);
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #2a75f0;
-            transform: translateY(-2px);
-        }
-
-        .btn-outline {
-            background: transparent;
-            color: var(--gray);
-            border: 1.5px solid var(--border);
-        }
-
-        .btn-outline:hover {
-            background: var(--light);
-            color: var(--dark);
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #e11573;
-            transform: translateY(-2px);
-        }
-
-        .btn-sm {
-            padding: 8px 16px;
-            font-size: 0.9rem;
-        }
-
-        .btn-icon {
-            width: 40px;
-            height: 40px;
-            padding: 0;
-            border-radius: 8px;
-        }
+        .btn-icon { width: 40px; height: 40px; padding: 0; border-radius: 8px; }
 
         .filter-actions {
             display: flex;
@@ -402,6 +367,7 @@ $conn->close();
             margin-top: 16px;
         }
 
+        /* --- Dual List Container --- */
         .dual-list-container {
             display: flex;
             gap: 24px;
@@ -411,27 +377,23 @@ $conn->close();
         .list-panel {
             flex: 1;
             border-radius: 12px;
-            background: white;
-            box-shadow: var(--card-shadow);
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
-        }
-
-        .list-panel:hover {
-            transform: translateY(-5px);
+            border: 1px solid var(--border);
         }
 
         .list-header {
-            padding: 20px;
-            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            padding: 15px 20px;
+            background: var(--primary);
             color: white;
             font-weight: 600;
             font-size: 1.1rem;
             display: flex;
             align-items: center;
             gap: 10px;
+            border-bottom: 3px solid var(--primary-light);
         }
 
         .list-body {
@@ -440,6 +402,7 @@ $conn->close();
             max-height: 500px;
             overflow-y: auto;
             padding: 0;
+            list-style: none;
         }
 
         .list-item {
@@ -453,25 +416,12 @@ $conn->close();
         .list-item:hover {
             background-color: rgba(67, 97, 238, 0.05);
         }
+        
+        .item-info { flex: 1; }
+        .item-name { font-weight: 600; margin-bottom: 4px; color: var(--dark); }
+        .item-details { font-size: 0.85rem; color: var(--gray); }
 
-        .list-item:last-child {
-            border-bottom: none;
-        }
-
-        .item-info {
-            flex: 1;
-        }
-
-        .item-name {
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-
-        .item-details {
-            font-size: 0.85rem;
-            color: var(--gray);
-        }
-
+        /* --- Signatory Path Specifics --- */
         .path-list .list-item {
             position: relative;
             padding-left: 60px;
@@ -479,12 +429,12 @@ $conn->close();
 
         .path-order {
             position: absolute;
-            left: 20px;
+            left: 15px;
             top: 50%;
             transform: translateY(-50%);
             width: 32px;
             height: 32px;
-            background: var(--primary);
+            background: var(--success-dark);
             color: white;
             border-radius: 50%;
             display: flex;
@@ -492,12 +442,28 @@ $conn->close();
             justify-content: center;
             font-weight: 600;
             font-size: 0.9rem;
+            box-shadow: 0 2px 5px rgba(58, 134, 255, 0.3);
         }
 
         .path-controls {
             display: flex;
             gap: 6px;
             margin-right: 10px;
+        }
+        
+        .path-controls .btn {
+            background: var(--light);
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+        .path-controls .btn:hover:not(:disabled) {
+            background: #e9ecef;
+            transform: none;
+        }
+        .path-controls .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: var(--light);
         }
 
         .empty-state {
@@ -508,12 +474,18 @@ $conn->close();
             padding: 40px 20px;
             color: var(--gray);
             text-align: center;
+            height: 100%;
         }
 
         .empty-state i {
             font-size: 3rem;
             margin-bottom: 16px;
             opacity: 0.5;
+        }
+        .empty-state small {
+            margin-top: 10px;
+            color: var(--primary);
+            font-weight: 500;
         }
 
         .submit-section {
@@ -523,10 +495,13 @@ $conn->close();
             border-top: 1px solid var(--border);
         }
 
+        /* --- Step Indicator --- */
         .step-indicator {
             display: flex;
-            margin-bottom: 30px;
+            justify-content: space-between;
+            margin-bottom: 40px;
             position: relative;
+            padding: 0 50px;
         }
 
         .step {
@@ -551,120 +526,119 @@ $conn->close();
             transition: all 0.3s ease;
         }
 
-        .step.active .step-number {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-
         .step.completed .step-number {
             background: var(--success-dark);
             color: white;
             border-color: var(--success-dark);
         }
+        .step.active .step-number {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: scale(1.1);
+        }
 
         .step-title {
             font-weight: 500;
             font-size: 0.9rem;
+            color: var(--gray);
+        }
+        .step.active .step-title, .step.completed .step-title {
+            color: var(--dark);
         }
 
         .step-indicator::before {
             content: "";
             position: absolute;
             top: 20px;
-            left: 0;
-            right: 0;
+            left: 50px;
+            right: 50px;
             height: 2px;
             background: var(--border);
             z-index: 1;
         }
 
-        .step.active ~ .step .step-number {
-            background: var(--light);
-            color: var(--gray);
-            border-color: var(--border);
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
         }
 
+        /* Responsive adjustments */
         @media (max-width: 992px) {
             .dual-list-container {
                 flex-direction: column;
             }
-            
-            .form-row {
-                flex-direction: column;
-                gap: 0;
+            .step-indicator {
+                padding: 0 10px;
             }
-            
-            .form-col {
-                width: 100%;
+            .step-indicator::before {
+                left: 10px;
+                right: 10px;
             }
-            
-            .content {
-                padding: 20px;
-            }
-            
-            .header {
-                padding: 20px;
+            .list-panel {
+                min-height: 400px;
             }
         }
-
         @media (max-width: 576px) {
-            body {
-                padding: 10px;
-            }
-            
-            .header h1 {
-                font-size: 1.8rem;
-            }
-            
-            .filter-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .btn {
-                width: 100%;
-                justify-content: center;
-            }
+            .form-row { flex-direction: column; gap: 0; }
+            .filter-actions { flex-direction: column; align-items: stretch; }
+            .btn { width: 100%; justify-content: center; }
+            .header { padding: 20px; }
+            .content { padding: 20px; }
+            .step-indicator { flex-wrap: wrap; }
+            .step { flex: 0 0 50%; margin-bottom: 20px; }
+            .step:nth-child(even) { text-align: left; }
+            .step:nth-child(odd) { text-align: right; }
+            .step-indicator::before { display: none; }
         }
     </style>
 </head>
 <body>
+    <div id="loading-overlay">
+        <i class="fas fa-spinner fa-spin fa-3x" style="color: var(--primary);"></i>
+    </div>
     <div class="container">
         <div class="header">
-            <h1><i class="fas fa-sitemap"></i> Document Signatory Path</h1>
-            <p>Define the approval sequence for your documents by setting up a signatory path</p>
+            <h1><i class="fas fa-sitemap"></i> Document Signatory Path Setup</h1>
+            <p>Define the approval sequence for documents by filtering employees and setting their signing order.</p>
         </div>
         
         <div class="content">
             <?php echo $message; ?>
             
             <div class="step-indicator">
-                <div class="step active">
+                <div class="step active" id="step-doc-id">
                     <div class="step-number">1</div>
                     <div class="step-title">Document ID</div>
                 </div>
-                <div class="step">
+                <div class="step" id="step-filter">
                     <div class="step-number">2</div>
                     <div class="step-title">Filter Employees</div>
                 </div>
-                <div class="step">
+                <div class="step" id="step-path">
                     <div class="step-number">3</div>
-                    <div class="step-title">Set Path</div>
+                    <div class="step-title">Set Path Sequence</div>
                 </div>
-                <div class="step">
+                <div class="step" id="step-save">
                     <div class="step-number">4</div>
-                    <div class="step-title">Save</div>
+                    <div class="step-title">Save Path</div>
                 </div>
             </div>
             
             <form method="POST" action="" onsubmit="return prepareFormSubmission(event);" id="main-path-form">
                 <div class="card">
-                    <h2 class="card-title"><i class="fas fa-file-alt"></i> Document Information</h2>
                     <div class="form-group">
                         <label class="form-label" for="doc_id">Document ID</label>
-                        <input type="number" id="doc_id" name="doc_id" class="form-control" placeholder="Enter the document ID" required value="<?php echo isset($_POST['doc_id']) ? htmlspecialchars($_POST['doc_id']) : ''; ?>">
-                        <small style="color: var(--gray); margin-top: 6px; display: block;">Enter the Document ID to proceed with setting up the signatory path.</small>
+                        <input type="number" id="doc_id" name="doc_id" class="form-control" placeholder="Enter the document ID (e.g., 1001)" required value="<?php echo isset($_POST['doc_id']) ? htmlspecialchars($_POST['doc_id']) : ''; ?>">
+                        <small style="color: var(--gray); margin-top: 6px; display: block;">This ID links the signatory path to the specific document.</small>
                     </div>
                     <input type="hidden" name="signatory_path" id="signatory_path_input">
                 </div>
@@ -672,7 +646,7 @@ $conn->close();
             
             <form id="filter-form" method="GET" action="">
                 <div class="card">
-                    <h2 class="card-title"><i class="fas fa-filter"></i> Filter Employees</h2>
+                    <h2 class="card-title"><i class="fas fa-filter"></i> Step 2: Filter Employees</h2>
                     <div class="form-row">
                         <div class="form-col">
                             <label class="form-label" for="office">Office</label>
@@ -702,7 +676,7 @@ $conn->close();
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label" for="search">Search</label>
+                        <label class="form-label" for="search">Refine Search</label>
                         <input type="text" id="search" name="search" class="form-control" placeholder="Search by name, office, or designation" value="<?php echo htmlspecialchars($search_term); ?>">
                     </div>
                     
@@ -720,8 +694,7 @@ $conn->close();
             </form>
             
             <div class="card">
-                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Set Signatory Path</h2>
-                <p style="margin-bottom: 20px; color: var(--gray);">Add employees to the signatory path and arrange them in the desired approval sequence.</p>
+                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Step 3: Set Path Sequence</h2>
                 
                 <div class="dual-list-container">
                     <div class="list-panel">
@@ -731,13 +704,13 @@ $conn->close();
                         <div class="list-body" id="employee-list">
                             <?php if (empty($selected_office)): ?>
                                 <div class="empty-state">
-                                    <i class="fas fa-users"></i>
-                                    <p>Please select an office to view employees</p>
+                                    <i class="fas fa-filter"></i>
+                                    <p>Select an **Office** in Step 2 to view employees.</p>
                                 </div>
                             <?php elseif (empty($employees)): ?>
                                 <div class="empty-state">
                                     <i class="fas fa-search"></i>
-                                    <p>No employees found for the selected criteria</p>
+                                    <p>No employees found for the selected criteria.</p>
                                 </div>
                             <?php else: ?>
                                 <?php foreach ($employees as $emp): ?>
@@ -767,8 +740,8 @@ $conn->close();
                         <div class="list-body" id="path-list">
                             <div class="empty-state">
                                 <i class="fas fa-arrow-left"></i>
-                                <p>Add employees to create a signatory path</p>
-                                <small>The order will determine the approval sequence</small>
+                                <p>Add employees to create a signatory path.</p>
+                                <small>Use the Up/Down buttons to manage the order.</small>
                             </div>
                         </div>
                     </div>
@@ -776,8 +749,8 @@ $conn->close();
             </div>
             
             <div class="submit-section">
-                <button type="submit" form="main-path-form" class="btn btn-success" style="padding: 14px 40px; font-size: 1.1rem;">
-                    <i class="fas fa-save"></i> Save Signatory Path
+                <button type="submit" form="main-path-form" class="btn btn-success" id="btn-save-path">
+                    <i class="fas fa-save"></i> Step 4: Save Signatory Path
                 </button>
             </div>
         </div>
@@ -786,6 +759,8 @@ $conn->close();
     <script>
         const pathList = document.getElementById('path-list');
         const pathInput = document.getElementById('signatory_path_input');
+        const docIdInput = document.getElementById('doc_id');
+        const loadingOverlay = document.getElementById('loading-overlay');
         
         // Function to ensure the path list reflects the correct order numbers and button states
         function updatePathOrder() {
@@ -795,8 +770,8 @@ $conn->close();
                 pathList.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-arrow-left"></i>
-                        <p>Add employees to create a signatory path</p>
-                        <small>The order will determine the approval sequence</small>
+                        <p>Add employees to create a signatory path.</p>
+                        <small>Use the Up/Down buttons to manage the order.</small>
                     </div>`;
             } else {
                 // Remove the initial empty message if it exists
@@ -820,6 +795,20 @@ $conn->close();
                     if (downButton) downButton.disabled = (index === items.length - 1);
                 });
             }
+            updateSteps(); // Call step update whenever the path changes
+        }
+        
+        function savePathToLocal() {
+            const items = pathList.querySelectorAll('.list-item[data-id]');
+            const pathData = Array.from(items).map(item => ({
+                id: item.dataset.id,
+                name: item.dataset.name,
+                office: item.dataset.office,
+                station: item.dataset.station,
+                designation: item.dataset.designation
+            }));
+            localStorage.setItem('signatoryPath', JSON.stringify(pathData));
+            localStorage.setItem('docId', docIdInput.value);
         }
         
         // 1. Add Signatory
@@ -840,6 +829,10 @@ $conn->close();
             const itemDiv = document.createElement('div');
             itemDiv.className = 'list-item';
             itemDiv.dataset.id = id;
+            itemDiv.dataset.name = name;
+            itemDiv.dataset.office = office;
+            itemDiv.dataset.station = station;
+            itemDiv.dataset.designation = designation;
             
             itemDiv.innerHTML = `
                 <div class="path-order"></div>
@@ -848,32 +841,34 @@ $conn->close();
                     <div class="item-details">${designation} • ${office}${station ? ' • ' + station : ''}</div>
                 </div>
                 <div class="path-controls">
-                    <button type="button" class="btn btn-outline btn-icon btn-up" onclick="moveSignatory(this.parentNode.parentNode, 'up')">
+                    <button type="button" class="btn btn-outline btn-icon btn-up btn-sm" onclick="moveSignatory(this.parentNode.parentNode, 'up')">
                         <i class="fas fa-arrow-up"></i>
                     </button>
-                    <button type="button" class="btn btn-outline btn-icon btn-down" onclick="moveSignatory(this.parentNode.parentNode, 'down')">
+                    <button type="button" class="btn btn-outline btn-icon btn-down btn-sm" onclick="moveSignatory(this.parentNode.parentNode, 'down')">
                         <i class="fas fa-arrow-down"></i>
                     </button>
                 </div>
-                <button type="button" class="btn btn-danger btn-icon" onclick="removeSignatory(this.parentNode)">
+                <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="removeSignatory(this.parentNode)">
                     <i class="fas fa-times"></i>
                 </button>
             `;
 
             pathList.appendChild(itemDiv);
             updatePathOrder();
+            savePathToLocal();
         }
         
         // 2. Remove Signatory
         window.removeSignatory = function(element) {
             element.remove();
             updatePathOrder();
+            savePathToLocal();
         }
 
         // 3. Reorder Signatory using buttons
         window.moveSignatory = function(element, direction) {
             const parent = element.parentNode;
-            const siblings = Array.from(parent.children).filter(item => item.dataset.id); // Filter out the empty message
+            const siblings = Array.from(parent.children).filter(item => item.dataset.id); 
             const index = siblings.indexOf(element);
             
             if (direction === 'up' && index > 0) {
@@ -883,6 +878,7 @@ $conn->close();
             }
             
             updatePathOrder();
+            savePathToLocal();
         }
 
         // 4. Prepare data for POST submission
@@ -897,7 +893,7 @@ $conn->close();
 
             const items = pathList.querySelectorAll('.list-item[data-id]');
             if (items.length === 0) {
-                alert('The signatory path is empty. Please add at least one signatory.');
+                alert('The signatory path is empty. Add at least one signatory.');
                 event.preventDefault();
                 return false;
             }
@@ -906,6 +902,7 @@ $conn->close();
             const signatoryIds = Array.from(items).map(item => item.dataset.id).join(',');
             pathInput.value = signatoryIds;
 
+            loadingOverlay.style.display = 'flex';
             return true; // Allow form submission
         }
 
@@ -915,37 +912,127 @@ $conn->close();
             document.getElementById('station').value = ''; 
         });
 
-        // Initialize the path display when the page loads
-        document.addEventListener('DOMContentLoaded', updatePathOrder);
-        
-        // Update step indicator based on user progress
-        document.addEventListener('DOMContentLoaded', function() {
-            const docIdInput = document.getElementById('doc_id');
-            const steps = document.querySelectorAll('.step');
-            
-            function updateSteps() {
-                if (docIdInput.value && parseInt(docIdInput.value) > 0) {
-                    steps[0].classList.add('completed');
-                    steps[1].classList.add('active');
-                    
-                    const employeeList = document.getElementById('employee-list');
-                    const hasEmployees = employeeList.querySelector('.list-item') !== null;
-                    
-                    if (hasEmployees) {
-                        steps[1].classList.add('completed');
-                        steps[2].classList.add('active');
-                        
-                        const pathItems = pathList.querySelectorAll('.list-item[data-id]');
-                        if (pathItems.length > 0) {
-                            steps[2].classList.add('completed');
-                            steps[3].classList.add('active');
-                        }
-                    }
-                }
+
+        // --- UI Step Indicator Logic ---
+        const stepDocId = document.getElementById('step-doc-id');
+        const stepFilter = document.getElementById('step-filter');
+        const stepPath = document.getElementById('step-path');
+        const stepSave = document.getElementById('step-save');
+        const employeeListDiv = document.getElementById('employee-list');
+
+        function updateSteps() {
+            // Reset all steps to inactive state
+            steps.forEach(s => s.classList.remove('active', 'completed'));
+
+            let currentStep = 1;
+
+            // Step 1: Document ID Check
+            if (docIdInput.value && parseInt(docIdInput.value) > 0) {
+                stepDocId.classList.add('completed');
+                currentStep = 2;
+            } else {
+                stepDocId.classList.add('active');
             }
-            
-            docIdInput.addEventListener('input', updateSteps);
+
+            // Step 2: Filter Employees Check
+            if (currentStep === 2) {
+                const hasEmployees = employeeListDiv.querySelector('.list-item') !== null;
+
+                if (hasEmployees) {
+                    stepFilter.classList.add('completed');
+                    currentStep = 3;
+                } else {
+                    stepFilter.classList.add('active');
+                }
+            } else if (currentStep > 2) {
+                 stepFilter.classList.add('completed');
+            }
+
+
+            // Step 3: Set Path Check
+            if (currentStep === 3) {
+                const pathItems = pathList.querySelectorAll('.list-item[data-id]');
+                if (pathItems.length > 0) {
+                    stepPath.classList.add('completed');
+                    currentStep = 4;
+                } else {
+                    stepPath.classList.add('active');
+                }
+            } else if (currentStep > 3) {
+                stepPath.classList.add('completed');
+            }
+
+            // Step 4: Save
+            if (currentStep === 4) {
+                stepSave.classList.add('active');
+            }
+        }
+        
+        const steps = [stepDocId, stepFilter, stepPath, stepSave];
+        docIdInput.addEventListener('input', () => {
             updateSteps();
+            savePathToLocal();
+        });
+
+        // Initialize the path display and steps when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const successAlert = document.querySelector('.alert.success');
+            if (successAlert) {
+                localStorage.removeItem('signatoryPath');
+                localStorage.removeItem('docId');
+                pathList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-arrow-left"></i>
+                        <p>Add employees to create a signatory path.</p>
+                        <small>Use the Up/Down buttons to manage the order.</small>
+                    </div>`;
+                docIdInput.value = '';
+            }
+
+            const savedDocId = localStorage.getItem('docId');
+            if (savedDocId && !docIdInput.value) {
+                docIdInput.value = savedDocId;
+            }
+
+            const savedPath = localStorage.getItem('signatoryPath');
+            if (savedPath) {
+                const pathData = JSON.parse(savedPath);
+                pathData.forEach(data => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'list-item';
+                    itemDiv.dataset.id = data.id;
+                    itemDiv.dataset.name = data.name;
+                    itemDiv.dataset.office = data.office;
+                    itemDiv.dataset.station = data.station;
+                    itemDiv.dataset.designation = data.designation;
+                    itemDiv.innerHTML = `
+                        <div class="path-order"></div>
+                        <div class="item-info">
+                            <div class="item-name">${data.name}</div>
+                            <div class="item-details">${data.designation} • ${data.office}${data.station ? ' • ' + data.station : ''}</div>
+                        </div>
+                        <div class="path-controls">
+                            <button type="button" class="btn btn-outline btn-icon btn-up btn-sm" onclick="moveSignatory(this.parentNode.parentNode, 'up')">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline btn-icon btn-down btn-sm" onclick="moveSignatory(this.parentNode.parentNode, 'down')">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="removeSignatory(this.parentNode)">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    `;
+                    pathList.appendChild(itemDiv);
+                });
+            }
+            updatePathOrder();
+            updateSteps();
+        });
+
+        // Show loading on filter form submit
+        document.getElementById('filter-form').addEventListener('submit', () => {
+            loadingOverlay.style.display = 'flex';
         });
     </script>
 </body>
