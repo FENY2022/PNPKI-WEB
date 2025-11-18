@@ -165,7 +165,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <i class="fas fa-bars h-5 w-5"></i>
                     </button>
 
-                    <a href="dashboard_home.php" target="content_frame" class="flex items-center space-x-3 group" title="Go to dashboard home">
+                    <a href="dashboard_home.php" target="content_frame" class="main-logo flex items-center space-x-3 group" title="Go to dashboard home">
                         <img src="logo/icon.png" alt="logo" class="w-8 h-8 rounded-full object-cover shadow-sm" />
                         <div class="hidden sm:block">
                             <div class="text-lg font-bold text-indigo-700">DDTMS</div>
@@ -252,7 +252,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                                 </div>
                             </div>
                             
-                            <a href="profile.php" target="content_frame" class="block px-5 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                            <a href="profile.php" target="content_frame" class="profile-link block px-5 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
                                 <i class="fas fa-user-circle w-4 mr-2 text-gray-400"></i> My Profile
                             </a>
                             <a href="logout.php" class="block px-5 py-3 text-sm text-red-600 font-semibold hover:bg-red-50 transition-colors border-t border-gray-100">
@@ -333,10 +333,21 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <i class="fas fa-users-cog w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>User Management</span>
                     </a>
+<a href="signat_path.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+    <i class="fas fa-route w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
+    <span>Signatory Path</span>
+</a>
+
+
+                    
                     <a href="admin_settings.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
                         <i class="fas fa-cogs w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>Settings</span>
                     </a>
+
+
+
+                    
                 <?php endif; ?>
 
             </nav>
@@ -394,11 +405,58 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         <div id="mobileBackdrop" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden lg:hidden"></div>
 
         <main id="mainContent" class="flex-1 h-full overflow-y-auto">
-            <iframe name="content_frame" src="dashboard_home.php" frameborder="0" class="w-full h-full bg-white" aria-label="Content frame"></iframe>
+            <iframe name="content_frame" src="about:blank" frameborder="0" class="w-full h-full bg-white" aria-label="Content frame"></iframe>
         </main>
     </div>
 
     <script>
+        // Global variables/helpers
+        const sidebar = document.getElementById('sidebar');
+        let collapsed = false;
+        
+        function clearActive() {
+            document.querySelectorAll('.sidebar-link').forEach(l => {
+                l.classList.remove('active');
+                l.style.borderLeft = '4px solid transparent';
+            });
+            document.querySelectorAll('.mobile-link').forEach(l => l.classList.remove('active'));
+        }
+
+        function closeMobile() {
+            mobileSidebar.classList.add('-translate-x-full');
+            mobileBackdrop.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            sidebarToggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function updateHash(url) {
+            const cleanUrl = url.split('?')[0].split('#')[0];
+            const hash = `#page=${encodeURIComponent(cleanUrl)}`;
+            // Use replaceState to avoid polluting browser history for every single navigation click
+            window.history.replaceState(null, '', hash);
+        }
+
+        function setActiveLink(url) {
+            clearActive();
+            const cleanUrl = url.split('?')[0].split('#')[0];
+
+            // Activate desktop link
+            const desktopLink = document.querySelector(`.sidebar-link[href="${cleanUrl}"]`);
+            if (desktopLink) {
+                desktopLink.classList.add('active');
+                if (!collapsed) {
+                    desktopLink.style.borderLeft = '4px solid #3b82f6';
+                }
+            }
+            // Activate mobile link
+            const mobileLink = document.querySelector(`.mobile-link[href="${cleanUrl}"]`);
+            if (mobileLink) {
+                mobileLink.classList.add('active');
+            }
+        }
+        
+        // --- Core Functions & Event Listeners ---
+        
         // Preloader hide
         window.addEventListener('load', function() {
             const pre = document.getElementById('preloader');
@@ -417,24 +475,13 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             document.body.classList.add('overflow-hidden');
             sidebarToggle.setAttribute('aria-expanded', 'true');
         }
-        function closeMobile() {
-            mobileSidebar.classList.add('-translate-x-full');
-            mobileBackdrop.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-            sidebarToggle.setAttribute('aria-expanded', 'false');
-        }
 
         if (sidebarToggle) sidebarToggle.addEventListener('click', openMobileSidebar);
         if (closeMobileSidebar) closeMobileSidebar.addEventListener('click', closeMobile);
         if (mobileBackdrop) mobileBackdrop.addEventListener('click', closeMobile);
 
-        // Close mobile when link clicked
-        document.querySelectorAll('.mobile-link').forEach(l => l.addEventListener('click', closeMobile));
-
-        // Desktop collapse sidebar button (collapses to icons-only)
+        // Desktop collapse sidebar button 
         const collapseBtn = document.getElementById('collapseSidebarBtn');
-        const sidebar = document.getElementById('sidebar');
-        let collapsed = false;
         if (collapseBtn) {
             const collapseIcon = collapseBtn.querySelector('i');
             collapseBtn.addEventListener('click', () => {
@@ -445,13 +492,11 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                     collapseIcon.classList.replace('fa-chevron-left', 'fa-chevron-right');
                     document.querySelectorAll('#sidebar .sidebar-link span').forEach(s => s.classList.add('hidden'));
                     document.querySelectorAll('#sidebar .sidebar-link').forEach(l => {
-                        l.classList.add('justify-center');
+                        l.classList.add('justify-center', 'px-0');
                         l.classList.remove('justify-start');
-                        l.classList.add('px-0');
+                        l.style.borderLeft = 'none'; // Clear border on collapse
                     });
                     document.querySelectorAll('#sidebar .sidebar-link i').forEach(i => i.classList.remove('w-5'));
-                    document.querySelectorAll('#sidebar .sidebar-link').forEach(l => l.style.borderLeft = 'none');
-                    document.querySelectorAll('#sidebar .sidebar-link.active').forEach(l => l.style.borderLeft = 'none');
                     document.querySelectorAll('#sidebar .font-bold.text-gray-500').forEach(t => t.classList.add('hidden'));
                     document.querySelector('#sidebar .border-t.text-xs').classList.add('hidden');
                 } else {
@@ -460,9 +505,8 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                     collapseIcon.classList.replace('fa-chevron-right', 'fa-chevron-left');
                     document.querySelectorAll('#sidebar .sidebar-link span').forEach(s => s.classList.remove('hidden'));
                     document.querySelectorAll('#sidebar .sidebar-link').forEach(l => {
-                        l.classList.remove('justify-center');
+                        l.classList.remove('justify-center', 'px-0');
                         l.classList.add('justify-start');
-                        l.classList.remove('px-0');
                     });
                     document.querySelectorAll('#sidebar .sidebar-link i').forEach(i => i.classList.add('w-5'));
                     document.querySelectorAll('#sidebar .sidebar-link.active').forEach(l => l.style.borderLeft = '4px solid #3b82f6');
@@ -472,29 +516,64 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             });
         }
 
-        // Active link handling for both desktop and mobile links
-        function clearActive() {
-            document.querySelectorAll('.sidebar-link').forEach(l => {
-                l.classList.remove('active');
-                l.style.borderLeft = '4px solid transparent';
-            });
-            document.querySelectorAll('.mobile-link').forEach(l => l.classList.remove('active'));
-        }
-        document.querySelectorAll('.sidebar-link, .mobile-link').forEach(link => {
-            link.addEventListener('click', function() {
-                // Don't mark profile/logout as active
-                if (this.href.includes('profile.php') || this.href.includes('logout.php')) {
-                    return;
+        // --- Persistent Navigation Logic ---
+        
+        // Main function to handle link clicks and URL hash updates
+        document.querySelectorAll('.sidebar-link, .mobile-link, .main-logo, .profile-link').forEach(link => {
+            // Check if the link should be handled by the main iframe navigation
+            const targetAttr = link.getAttribute('target');
+            if (targetAttr === 'content_frame') {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    const targetUrl = this.getAttribute('href');
+                    const iframe = window.frames['content_frame'];
+                    
+                    if (iframe && targetUrl) {
+                        // 1. Load content into iframe
+                        iframe.location.replace(targetUrl);
+
+                        // 2. Update parent URL hash for persistence
+                        updateHash(targetUrl);
+                        
+                        // 3. Set active link
+                        setActiveLink(targetUrl);
+                    }
+                    
+                    // 4. Close mobile menu if applicable
+                    if (this.classList.contains('mobile-link')) {
+                        closeMobile();
+                    }
+                });
+            }
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const iframe = document.querySelector('iframe[name="content_frame"]');
+            const defaultPage = 'dashboard_home.php';
+            let initialPage = defaultPage;
+
+            // Check for hash value on load
+            if (window.location.hash) {
+                const hashMatch = window.location.hash.match(/#page=([^&]+)/);
+                if (hashMatch) {
+                    const decodedUrl = decodeURIComponent(hashMatch[1]);
+                    // Only use hash if it points to a non-empty file
+                    if (decodedUrl) {
+                        initialPage = decodedUrl;
+                    }
                 }
-                clearActive();
-                this.classList.add('active');
-                if (!collapsed) {
-                    this.style.borderLeft = '4px solid #3b82f6';
-                }
-            });
+            }
+
+            // Set initial iframe source and active link
+            if (iframe) {
+                iframe.src = initialPage;
+            }
+            setActiveLink(initialPage);
         });
 
-        // Notifications dropdown
+
+        // Notifications dropdown (existing logic preserved)
         const notifBtn = document.getElementById('notifBtn');
         const notifMenu = document.getElementById('notifMenu');
         if (notifBtn && notifMenu) {
@@ -510,7 +589,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             notifMenu.addEventListener('click', (e) => e.stopPropagation());
         }
 
-        // Profile dropdown
+        // Profile dropdown (existing logic preserved)
         const profileBtn = document.getElementById('profileBtn');
         const profileMenu = document.getElementById('profileMenu');
         if (profileBtn && profileMenu) {
@@ -526,7 +605,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             profileMenu.addEventListener('click', (e) => e.stopPropagation());
         }
 
-        // Mark all notifications read (example action)
+        // Mark all notifications read (existing logic preserved)
         const markAllRead = document.getElementById('markAllRead');
         const notifBadge = document.getElementById('notifBadge');
         if (markAllRead && notifBadge) {
@@ -537,7 +616,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             });
         }
 
-        // Search field: quick open suggestions (local demo)
+        // Search field: quick open suggestions (existing logic preserved, updated to use iframe.location.replace)
         const searchInput = document.getElementById('globalSearch');
         let searchTimer = null;
         if (searchInput) {
@@ -545,13 +624,20 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                 clearTimeout(searchTimer);
                 searchTimer = setTimeout(() => {
                     const q = this.value.trim();
-                    // For now: if user types "queue" navigate to queue, as a helpful shortcut
                     if (q.length >= 3) {
                         const lq = q.toLowerCase();
+                        let targetUrl = null;
                         if (lq.includes('queue')) {
-                            window.frames['content_frame'].location = 'my_queue.php';
+                            targetUrl = 'my_queue.php';
                         } else if (lq.includes('draft')) {
-                            window.frames['content_frame'].location = 'my_drafts.php';
+                            targetUrl = 'my_drafts.php';
+                        }
+                        
+                        if (targetUrl) {
+                            window.frames['content_frame'].location.replace(targetUrl);
+                            updateHash(targetUrl);
+                            setActiveLink(targetUrl);
+                            this.value = ''; // Clear search field
                         }
                     }
                 }, 350);
@@ -559,13 +645,16 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             searchInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    // fallback: open dashboard home
-                    window.frames['content_frame'].location = 'dashboard_home.php?search=' + encodeURIComponent(this.value);
+                    const searchUrl = 'dashboard_home.php?search=' + encodeURIComponent(this.value);
+                    window.frames['content_frame'].location.replace(searchUrl);
+                    updateHash(searchUrl);
+                    setActiveLink('dashboard_home.php'); // Search results usually belong to the dashboard home context
+                    this.value = ''; // Clear search field
                 }
             });
         }
 
-        // Keep iframe height synced (defensive)
+        // Keep iframe height synced (defensive, existing logic preserved)
         const iframe = document.querySelector('iframe[name="content_frame"]');
         function resizeFrame() {
             if (!iframe) return;
@@ -579,25 +668,32 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         window.addEventListener('load', resizeFrame);
         resizeFrame();
 
-        // Accessibility: close with Escape
+        // Accessibility: close with Escape (existing logic preserved)
         document.addEventListener('keydown', function(e){
             if (e.key === 'Escape') {
-                // close menus and mobile sidebar
                 if (!notifMenu.classList.contains('hidden')) notifMenu.classList.add('hidden');
                 if (!profileMenu.classList.contains('hidden')) profileMenu.classList.add('hidden');
                 if (!mobileBackdrop.classList.contains('hidden')) closeMobile();
             }
         });
         
-        // Ensure the initial dashboard link is marked active on load
-        document.addEventListener('DOMContentLoaded', () => {
-            const dashboardLink = document.querySelector('a[href="dashboard_home.php"][target="content_frame"]');
-            if (dashboardLink) {
-                clearActive();
-                dashboardLink.classList.add('active');
-                dashboardLink.style.borderLeft = '4px solid #3b82f6';
+        // Handle browser back/forward buttons (re-load content based on hash)
+        window.addEventListener('hashchange', function() {
+            const hashMatch = window.location.hash.match(/#page=([^&]+)/);
+            if (hashMatch) {
+                const targetUrl = decodeURIComponent(hashMatch[1]);
+                const iframe = window.frames['content_frame'];
+                if (iframe && iframe.location.href.split('?')[0].split('#')[0] !== targetUrl.split('?')[0].split('#')[0]) {
+                    iframe.location.replace(targetUrl);
+                    setActiveLink(targetUrl);
+                }
+            } else {
+                // If hash is cleared, go to default page
+                window.frames['content_frame'].location.replace(defaultPage);
+                setActiveLink(defaultPage);
             }
         });
+        
     </script>
 
 </body>
