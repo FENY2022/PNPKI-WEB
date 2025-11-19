@@ -2,7 +2,7 @@
 
 
 
- $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+ echo $batch_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 session_start();
 
@@ -93,9 +93,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path_data'])
             // 1. Clear existing global path
             $write_conn->query("DELETE FROM document_signatories"); 
 
-            // 2. Generate a unique Batch ID for this set of inserts
-            // Format: BATCH-YYYYMMDD-RANDOM
-            $batch_id = 'BATCH-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
+            // 2. Use the ID from the GET parameter as the Batch ID.
+            $batch_id = strval($id);
 
             // 3. Insert with batch_id
             $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (batch_id, user_id, signing_order, office_assigned, station_assigned) VALUES (?, ?, ?, ?, ?)");
@@ -631,7 +630,6 @@ if ($read_conn) $read_conn->close();
             .header { padding: 20px; }
             .content { padding: 20px; }
             .step-indicator { flex-wrap: wrap; }
-            .step { flex: 0 0 50%; margin-bottom: 20px; }
             .step:nth-child(even) { text-align: left; }
             .step:nth-child(odd) { text-align: right; }
             .step-indicator::before { display: none; }
