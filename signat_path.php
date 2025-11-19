@@ -1,8 +1,6 @@
 <?php
-
-
-
- echo $batch_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// --- 0. Get Batch ID from URL ---
+$batch_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 session_start();
 
@@ -44,11 +42,12 @@ $sql_check_table = "SHOW TABLES LIKE '{$table_name}'";
 $result_check_table = $write_conn->query($sql_check_table);
 
 if ($result_check_table->num_rows == 0) {
-    // Create table with NEW batch_id column
+    // Create table with NEW columns (batch_id, full_name)
     $create_sql = "CREATE TABLE {$table_name} (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        batch_id VARCHAR(50) DEFAULT NULL,
+        doc_id INT AUTO_INCREMENT PRIMARY KEY,
+        batch_id INT DEFAULT 0,
         user_id INT NOT NULL,
+        full_name VARCHAR(255) DEFAULT NULL,
         signing_order INT NOT NULL,
         office_assigned VARCHAR(255) DEFAULT NULL,
         station_assigned VARCHAR(255) DEFAULT NULL,
@@ -59,15 +58,21 @@ if ($result_check_table->num_rows == 0) {
         die("Error creating {$table_name} table: " . $write_conn->error);
     }
 } else {
-    // Check for new columns (Added batch_id here)
-    $columns = ['office_assigned', 'station_assigned', 'batch_id'];
-    foreach ($columns as $col) {
+    // Check for new columns and ALTER if missing
+    $columns_to_check = [
+        'office_assigned' => 'VARCHAR(255) DEFAULT NULL',
+        'station_assigned' => 'VARCHAR(255) DEFAULT NULL',
+        'batch_id' => 'INT DEFAULT 0',
+        'full_name' => 'VARCHAR(255) DEFAULT NULL'
+    ];
+
+    foreach ($columns_to_check as $col => $definition) {
         $sql_check_column = "SHOW COLUMNS FROM {$table_name} LIKE '{$col}'";
         $result_check_column = $write_conn->query($sql_check_column);
         
         if ($result_check_column->num_rows == 0) {
             // Add column if missing
-            $alter_sql = "ALTER TABLE {$table_name} ADD COLUMN {$col} VARCHAR(255) DEFAULT NULL";
+            $alter_sql = "ALTER TABLE {$table_name} ADD COLUMN {$col} {$definition}";
             if ($write_conn->query($alter_sql) !== TRUE) {
                 error_log("Error altering {$table_name} table to add {$col}: " . $write_conn->error);
             }
@@ -90,24 +95,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path_data'])
         
         $write_conn->begin_transaction();
         try {
-            // 1. Clear existing global path
+            // 1. Clear existing entries
+            // Note: This clears ALL entries. If you only want to clear for this specific batch,
+            // change to: "DELETE FROM document_signatories WHERE batch_id = ?"
             $write_conn->query("DELETE FROM document_signatories"); 
 
-            // 2. Use the ID from the GET parameter as the Batch ID.
-            $batch_id = strval($id);
-
-            // 3. Insert with batch_id
-            $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (batch_id, user_id, signing_order, office_assigned, station_assigned) VALUES (?, ?, ?, ?, ?)");
+            // 2. Insert with batch_id and full_name
+            $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (batch_id, user_id, full_name, signing_order, office_assigned, station_assigned) VALUES (?, ?, ?, ?, ?, ?)");
+            
             $order = 1;
 
             foreach ($signatory_path as $item) {
                 $user_id = (int)($item['id'] ?? 0);
+                $name = $item['name'] ?? '';
                 $office = $item['office'] ?? null;
                 $station = $item['station'] ?? null;
 
                 if ($user_id > 0) {
-                    // Bind parameters: s (batch_id), i (user_id), i (order), s (office), s (station)
-                    $stmt_insert->bind_param("siiss", $batch_id, $user_id, $order, $office, $station); 
+                    // Bind parameters: 
+                    // i (batch_id), i (user_id), s (full_name), i (order), s (office), s (station)
+                    $stmt_insert->bind_param("iisiss", $batch_id, $user_id, $name, $order, $office, $station); 
                     $stmt_insert->execute();
                     $order++;
                 }
@@ -669,6 +676,8 @@ if ($read_conn) $read_conn->close();
             </form>
             
             <form id="filter-form" method="GET" action="">
+                <input type="hidden" name="id" value="<?php echo htmlspecialchars($batch_id); ?>">
+                
                 <div class="card">
                     <h2 class="card-title"><i class="fas fa-filter"></i> Step 1: Filter Employees</h2>
                     <div class="form-row">
@@ -709,7 +718,7 @@ if ($read_conn) $read_conn->close();
                             <i class="fas fa-search"></i> Apply Filters
                         </button>
                         <?php if (!empty($selected_office) || !empty($selected_station) || !empty($search_term)): ?>
-                            <a href="signat_path.php" class="btn btn-outline">
+                            <a href="signat_path.php?id=<?php echo htmlspecialchars($batch_id); ?>" class="btn btn-outline">
                                 <i class="fas fa-times"></i> Clear Filters
                             </a>
                         <?php endif; ?>
@@ -718,7 +727,7 @@ if ($read_conn) $read_conn->close();
             </form>
             
             <div class="card">
-                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Step 2: Set Path Sequence</h2>
+                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Step 2: Set Path Sequence (Batch ID: <?php echo $batch_id; ?>)</h2>
                 
                 <div class="dual-list-container">
                     <div class="list-panel">
@@ -905,7 +914,7 @@ if ($read_conn) $read_conn->close();
             savePathToLocal();
         }
 
-        // 4. Prepare data for POST submission
+        // 4. Prepare data for POST submission (UPDATED)
         window.prepareFormSubmission = function(event) {
             const items = pathList.querySelectorAll('.list-item[data-id]');
             if (items.length === 0) {
@@ -914,9 +923,10 @@ if ($read_conn) $read_conn->close();
                 return false;
             }
 
-            // Construct a structured array of objects with ID, office, and station
+            // Construct a structured array of objects with ID, NAME, office, and station
             const pathData = Array.from(items).map(item => ({
                 id: item.dataset.id,
+                name: item.dataset.name, // Capture full name
                 office: item.dataset.office,
                 station: item.dataset.station
             }));
@@ -935,7 +945,7 @@ if ($read_conn) $read_conn->close();
         });
 
 
-        // --- UI Step Indicator Logic (UPDATED FOR 3 STEPS) ---
+        // --- UI Step Indicator Logic ---
         const stepFilter = document.getElementById('step-filter');
         const stepPath = document.getElementById('step-path');
         const stepSave = document.getElementById('step-save');
@@ -1070,6 +1080,9 @@ if ($read_conn) $read_conn->close();
         document.addEventListener('submit', saveScroll, true);
     })();
     </script>
+
+    
+
 
 </body>
 </html>
