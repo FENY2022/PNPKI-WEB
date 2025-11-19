@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 18, 2025 at 09:23 AM
+-- Generation Time: Nov 19, 2025 at 06:07 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -81,7 +81,24 @@ CREATE TABLE `document_signatories` (
   `signing_order` int(11) NOT NULL,
   `office_assigned` varchar(255) DEFAULT NULL,
   `station_assigned` varchar(255) DEFAULT NULL,
-  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `office_id` int(11) DEFAULT NULL,
+  `station_id` int(11) DEFAULT NULL,
+  `batch_id` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `office_station`
+--
+
+CREATE TABLE `office_station` (
+  `id` int(11) NOT NULL,
+  `office_id` int(11) NOT NULL,
+  `office` varchar(255) NOT NULL,
+  `station_id` int(11) NOT NULL,
+  `station` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -156,6 +173,12 @@ ALTER TABLE `document_signatories`
   ADD PRIMARY KEY (`doc_id`,`signing_order`);
 
 --
+-- Indexes for table `office_station`
+--
+ALTER TABLE `office_station`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -183,6 +206,18 @@ ALTER TABLE `document_actions`
 --
 ALTER TABLE `document_files`
   MODIFY `file_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `document_signatories`
+--
+ALTER TABLE `document_signatories`
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+
+--
+-- AUTO_INCREMENT for table `office_station`
+--
+ALTER TABLE `office_station`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `users`
