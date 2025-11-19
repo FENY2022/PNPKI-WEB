@@ -2,92 +2,108 @@
 session_start();
 
 // --- 1. Database Configuration Settings ---
-// Configuration based on db.php (Local DB - for WRITE operations)
 define('WRITE_DB_HOST', 'localhost');
 define('WRITE_DB_USER', 'root');
 define('WRITE_DB_PASS', '');
 define('WRITE_DB_NAME', 'ddts_pnpki');
 
-// Configuration based on db_international.php (International DB - for READ operations)
 define('READ_DB_HOST', '153.92.15.60');
 define('READ_DB_USER', 'u645536029_otos_root');
 define('READ_DB_PASS', '6yI3PF3OZ');
 define('READ_DB_NAME', 'u645536029_otos');
 
 // --- 2. Establish Dual Connections ---
-// Suppress errors for manual handling and cleaner output
 mysqli_report(MYSQLI_REPORT_OFF);
 
-// A. Establish WRITE connection (Local DB)
+// A. WRITE connection
 $write_conn = @new mysqli(WRITE_DB_HOST, WRITE_DB_USER, WRITE_DB_PASS, WRITE_DB_NAME);
 if ($write_conn->connect_error) {
-    die("Fatal Error: Could not connect to Local Database for WRITE operations. " . $write_conn->connect_error);
+    die("Fatal Error: Could not connect to Local Database: " . $write_conn->connect_error);
 }
 $write_conn->set_charset("utf8mb4");
 
-// B. Establish READ connection (International DB)
+// B. READ connection
 $read_conn = @new mysqli(READ_DB_HOST, READ_DB_USER, READ_DB_PASS, READ_DB_NAME);
 if ($read_conn->connect_error) {
-    // We can proceed with limited functionality if the READ DB is down, 
-    // but for this critical function, we'll die since we can't fetch employees.
-    die("Fatal Error: Could not connect to International Database for READ operations. " . $read_conn->connect_error);
+    die("Fatal Error: Could not connect to International Database: " . $read_conn->connect_error);
 }
 $read_conn->set_charset("utf8mb4");
 
-// Re-enable strict error reporting for query execution
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// --- 3. Table and Timezone Setup (on WRITE DB) ---
-// Create document_signatories table if it doesn't exist (on Local DB)
-$sql = "SHOW TABLES LIKE 'document_signatories'";
-$result = $write_conn->query($sql);
-if ($result->num_rows == 0) {
-    // Table structure for a GLOBAL path (no doc_id).
-    $create_sql = "CREATE TABLE document_signatories (
+// --- 3. Table Structure Management (UPDATED) ---
+$table_name = 'document_signatories';
+
+// Check if table exists
+$sql_check_table = "SHOW TABLES LIKE '{$table_name}'";
+$result_check_table = $write_conn->query($sql_check_table);
+
+if ($result_check_table->num_rows == 0) {
+    // Create table with NEW batch_id column
+    $create_sql = "CREATE TABLE {$table_name} (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        batch_id VARCHAR(50) DEFAULT NULL,
         user_id INT NOT NULL,
         signing_order INT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES useremployee(id)
+        office_assigned VARCHAR(255) DEFAULT NULL,
+        station_assigned VARCHAR(255) DEFAULT NULL,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
-    // NOTE: This CREATE TABLE assumes 'useremployee' exists on the WRITE DB 
-    // for the FOREIGN KEY constraint. If not, the CREATE will fail here. 
-    // If 'useremployee' only exists on READ DB, the FOREIGN KEY must be removed 
-    // or the table must be synced. We proceed assuming 'useremployee' exists 
-    // on the WRITE DB or the key constraint is manageable.
+    
     if ($write_conn->query($create_sql) !== TRUE) {
-        die("Error creating document_signatories table: " . $write_conn->error);
+        die("Error creating {$table_name} table: " . $write_conn->error);
+    }
+} else {
+    // Check for new columns (Added batch_id here)
+    $columns = ['office_assigned', 'station_assigned', 'batch_id'];
+    foreach ($columns as $col) {
+        $sql_check_column = "SHOW COLUMNS FROM {$table_name} LIKE '{$col}'";
+        $result_check_column = $write_conn->query($sql_check_column);
+        
+        if ($result_check_column->num_rows == 0) {
+            // Add column if missing
+            $alter_sql = "ALTER TABLE {$table_name} ADD COLUMN {$col} VARCHAR(255) DEFAULT NULL";
+            if ($write_conn->query($alter_sql) !== TRUE) {
+                error_log("Error altering {$table_name} table to add {$col}: " . $write_conn->error);
+            }
+        }
     }
 }
 
-// Set timezone
 date_default_timezone_set('Asia/Manila');
-
 $message = '';
 
-// --- 4. Handle Form Submission (Save Global Signatory Path - on WRITE DB) ---
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path'])) {
+// --- 4. Handle Form Submission (UPDATED) ---
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path_data'])) {
     
-    // Sanitize and validate input
-    $signatory_path_str = trim($_POST['signatory_path']);
-    $signatory_ids = array_filter(array_map('intval', explode(',', $signatory_path_str)));
+    $signatory_path_json = $_POST['signatory_path_data'];
+    $signatory_path = json_decode($signatory_path_json, true);
 
-    if (empty($signatory_ids)) {
-        $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: No signatories were selected for the path.</div>';
+    if (empty($signatory_path) || !is_array($signatory_path)) {
+        $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: No valid signatories selected.</div>';
     } else {
         
-        // Start a transaction for atomicity on the WRITE DB
         $write_conn->begin_transaction();
         try {
-            // Delete ALL existing records to set the new global path
+            // 1. Clear existing global path
             $write_conn->query("DELETE FROM document_signatories"); 
 
-            // Insert the new path sequence
-            $order = 1;
-            $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (user_id, signing_order) VALUES (?, ?)");
+            // 2. Generate a unique Batch ID for this set of inserts
+            // Format: BATCH-YYYYMMDD-RANDOM
+            $batch_id = 'BATCH-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
 
-            foreach ($signatory_ids as $user_id) {
+            // 3. Insert with batch_id
+            $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (batch_id, user_id, signing_order, office_assigned, station_assigned) VALUES (?, ?, ?, ?, ?)");
+            $order = 1;
+
+            foreach ($signatory_path as $item) {
+                $user_id = (int)($item['id'] ?? 0);
+                $office = $item['office'] ?? null;
+                $station = $item['station'] ?? null;
+
                 if ($user_id > 0) {
-                    $stmt_insert->bind_param("ii", $user_id, $order); 
+                    // Bind parameters: s (batch_id), i (user_id), i (order), s (office), s (station)
+                    $stmt_insert->bind_param("siiss", $batch_id, $user_id, $order, $office, $station); 
                     $stmt_insert->execute();
                     $order++;
                 }
@@ -95,37 +111,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path'])) {
 
             $stmt_insert->close();
             $write_conn->commit();
-            $message = '<div class="alert success"><i class="fas fa-check-circle"></i> Global Signatory Path successfully set.</div>';
+            $message = '<div class="alert success"><i class="fas fa-check-circle"></i> Global Signatory Path set (Batch ID: ' . $batch_id . ').</div>';
 
         } catch (Exception $e) {
             $write_conn->rollback();
-            $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Failed to set signatory path. ' . $e->getMessage() . '</div>';
+            $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Failed to set path. ' . $e->getMessage() . '</div>';
             error_log("Signatory Path Save Error: " . $e->getMessage());
         }
     }
 }
 
-
-// --- 5. Fetch Distinct Offices for Filter (from READ DB) ---
+// --- 5. Fetch Distinct Offices (Unchanged) ---
 $offices = [];
 $sql_offices = "SELECT DISTINCT Office FROM useremployee WHERE Office IS NOT NULL AND Office != '' ORDER BY Office ASC";
-$result_offices = $read_conn->query($sql_offices); // Using $read_conn
+$result_offices = $read_conn->query($sql_offices);
 if ($result_offices) {
     while ($row = $result_offices->fetch_assoc()) {
         $offices[] = $row['Office'];
     }
 }
 
-// --- 6. Get Current Filters and Search Term ---
+// --- 6. Get Filters (Unchanged) ---
 $selected_office = isset($_GET['office']) ? trim($_GET['office']) : '';
 $selected_station = isset($_GET['station']) ? trim($_GET['station']) : '';
 $search_term = isset($_GET['search']) ? trim($_GET['search']) : '';
 $employees = [];
 $stations = [];
 
-// --- 7. Fetch Stations based on Selected Office (from READ DB) ---
+// --- 7. Fetch Stations (Unchanged) ---
 if (!empty($selected_office)) {
-    $sql_stations = $read_conn->prepare("SELECT DISTINCT Station FROM useremployee WHERE Office = ? AND Station IS NOT NULL AND Station != '' ORDER BY Station ASC"); // Using $read_conn
+    $sql_stations = $read_conn->prepare("SELECT DISTINCT Station FROM useremployee WHERE Office = ? AND Station IS NOT NULL AND Station != '' ORDER BY Station ASC");
     $sql_stations->bind_param("s", $selected_office);
     $sql_stations->execute();
     $result_stations = $sql_stations->get_result();
@@ -135,8 +150,7 @@ if (!empty($selected_office)) {
     $sql_stations->close();
 }
 
-
-// --- 8. Fetch Employees based on Filters and Search (from READ DB) ---
+// --- 8. Fetch Employees (Unchanged) ---
 $sql_employees = "SELECT id, Full_Name, Office, Station, Designation FROM useremployee WHERE 1=1";
 $params = [];
 $types = '';
@@ -154,7 +168,6 @@ if (!empty($selected_station)) {
 }
 
 if (!empty($search_term)) {
-    // Search by Full_Name, Office, or Designation for refinement
     $sql_employees .= " AND (Full_Name LIKE ? OR Office LIKE ? OR Designation LIKE ?)";
     $search_pattern = '%' . $search_term . '%';
     $params[] = $search_pattern;
@@ -164,8 +177,7 @@ if (!empty($search_term)) {
 }
 
 $sql_employees .= " ORDER BY Full_Name ASC LIMIT 100"; 
-
-$stmt_employees = $read_conn->prepare($sql_employees); // Using $read_conn
+$stmt_employees = $read_conn->prepare($sql_employees);
 
 if (!empty($types)) {
     $stmt_employees->bind_param($types, ...$params);
@@ -179,13 +191,8 @@ if ($stmt_employees->execute()) {
 }
 $stmt_employees->close();
 
-// Close both active connections
-if ($write_conn && $write_conn instanceof mysqli) {
-    $write_conn->close();
-}
-if ($read_conn && $read_conn instanceof mysqli) {
-    $read_conn->close();
-}
+if ($write_conn) $write_conn->close();
+if ($read_conn) $read_conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -655,7 +662,7 @@ if ($read_conn && $read_conn instanceof mysqli) {
             </div>
             
             <form method="POST" action="" onsubmit="return prepareFormSubmission(event);" id="main-path-form">
-                <input type="hidden" name="signatory_path" id="signatory_path_input">
+                <input type="hidden" name="signatory_path_data" id="signatory_path_input">
             </form>
             
             <form id="filter-form" method="GET" action="">
@@ -812,6 +819,7 @@ if ($read_conn && $read_conn instanceof mysqli) {
         }
         
         function savePathToLocal() {
+            // Collect all necessary data including office and station
             const items = pathList.querySelectorAll('.list-item[data-id]');
             const pathData = Array.from(items).map(item => ({
                 id: item.dataset.id,
@@ -820,6 +828,7 @@ if ($read_conn && $read_conn instanceof mysqli) {
                 station: item.dataset.station,
                 designation: item.dataset.designation
             }));
+            // Save the complete structured data to local storage
             localStorage.setItem('signatoryPath', JSON.stringify(pathData));
         }
         
@@ -842,8 +851,8 @@ if ($read_conn && $read_conn instanceof mysqli) {
             itemDiv.className = 'list-item';
             itemDiv.dataset.id = id;
             itemDiv.dataset.name = name;
-            itemDiv.dataset.office = office;
-            itemDiv.dataset.station = station;
+            itemDiv.dataset.office = office; // Store office string
+            itemDiv.dataset.station = station; // Store station string
             itemDiv.dataset.designation = designation;
             
             itemDiv.innerHTML = `
@@ -902,9 +911,15 @@ if ($read_conn && $read_conn instanceof mysqli) {
                 return false;
             }
 
-            // Construct a comma-separated string of User IDs in order
-            const signatoryIds = Array.from(items).map(item => item.dataset.id).join(',');
-            pathInput.value = signatoryIds;
+            // Construct a structured array of objects with ID, office, and station
+            const pathData = Array.from(items).map(item => ({
+                id: item.dataset.id,
+                office: item.dataset.office,
+                station: item.dataset.station
+            }));
+            
+            // JSON-encode the structured data and place it in the hidden input
+            pathInput.value = JSON.stringify(pathData);
 
             loadingOverlay.style.display = 'flex';
             return true; // Allow form submission
@@ -1016,5 +1031,42 @@ if ($read_conn && $read_conn instanceof mysqli) {
             loadingOverlay.style.display = 'flex';
         });
     </script>
+
+    <script>
+    (function(){
+        const SCROLL_KEY = 'signat_path_scroll';
+
+        // Restore scroll position on load (after layout)
+        document.addEventListener('DOMContentLoaded', () => {
+            const v = sessionStorage.getItem(SCROLL_KEY);
+            if (v !== null) {
+                const y = parseInt(v, 10) || 0;
+                // Delay slightly to allow layout/images to settle
+                setTimeout(() => window.scrollTo({ top: y, left: 0, behavior: 'auto' }), 50);
+                // remove stored value so new visits start fresh
+                sessionStorage.removeItem(SCROLL_KEY);
+            }
+        });
+
+        // Throttled save of scroll position
+        let ticking = false;
+        function saveScroll() {
+            sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+            ticking = false;
+        }
+
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                ticking = true;
+                requestAnimationFrame(saveScroll);
+            }
+        }, { passive: true });
+
+        // Also ensure position saved before navigation/unload or form submits
+        window.addEventListener('beforeunload', saveScroll);
+        document.addEventListener('submit', saveScroll, true);
+    })();
+    </script>
+
 </body>
 </html>
