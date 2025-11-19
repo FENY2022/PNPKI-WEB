@@ -402,7 +402,11 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
 
         <div id="mobileBackdrop" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden lg:hidden"></div>
 
-        <main id="mainContent" class="flex-1 h-full overflow-y-auto">
+        <main id="mainContent" class="flex-1 h-full overflow-y-auto relative">
+            <div id="iframeLoader" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white z-40 transition-opacity duration-300">
+                <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-indigo-600"></div>
+                <div class="text-sm font-medium text-gray-600 mt-3">Loading Content…</div>
+            </div>
             <iframe name="content_frame" src="about:blank" frameborder="0" class="w-full h-full bg-white" aria-label="Content frame"></iframe>
         </main>
     </div>
@@ -411,6 +415,10 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         // Global variables/helpers
         const sidebar = document.getElementById('sidebar');
         let collapsed = false;
+        // --- New: Iframe and Loader references ---
+        const iframe = document.querySelector('iframe[name="content_frame"]'); 
+        const iframeLoader = document.getElementById('iframeLoader');
+        // -----------------------------------------
         
         function clearActive() {
             document.querySelectorAll('.sidebar-link').forEach(l => {
@@ -453,6 +461,16 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             }
         }
         
+        // --- New: Loader functions ---
+        function showIframeLoader() {
+            if (iframeLoader) iframeLoader.classList.remove('hidden');
+        }
+
+        function hideIframeLoader() {
+            if (iframeLoader) iframeLoader.classList.add('hidden');
+        }
+        // -----------------------------
+
         // --- Core Functions & Event Listeners ---
         
         // Preloader hide
@@ -525,20 +543,23 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                     e.preventDefault();
                     
                     const targetUrl = this.getAttribute('href');
-                    const iframe = window.frames['content_frame'];
+                    const iframeWindow = window.frames['content_frame']; // Use iframeWindow for clarity
                     
-                    if (iframe && targetUrl) {
-                        // 1. Load content into iframe
-                        iframe.location.replace(targetUrl);
+                    if (iframeWindow && targetUrl) {
+                        // 1. Show loader
+                        showIframeLoader();
 
-                        // 2. Update parent URL hash for persistence
+                        // 2. Load content into iframe
+                        iframeWindow.location.replace(targetUrl);
+
+                        // 3. Update parent URL hash for persistence
                         updateHash(targetUrl);
                         
-                        // 3. Set active link
+                        // 4. Set active link
                         setActiveLink(targetUrl);
                     }
                     
-                    // 4. Close mobile menu if applicable
+                    // 5. Close mobile menu if applicable
                     if (this.classList.contains('mobile-link')) {
                         closeMobile();
                     }
@@ -547,7 +568,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         });
         
         document.addEventListener('DOMContentLoaded', () => {
-            const iframe = document.querySelector('iframe[name="content_frame"]');
+            // iframe is defined globally
             const defaultPage = 'dashboard_home.php';
             let initialPage = defaultPage;
 
@@ -565,10 +586,18 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
 
             // Set initial iframe source and active link
             if (iframe) {
+                // Show loader for initial load
+                showIframeLoader();
                 iframe.src = initialPage;
             }
             setActiveLink(initialPage);
         });
+
+        // --- New: Iframe Load Listener ---
+        if (iframe) {
+            iframe.addEventListener('load', hideIframeLoader);
+        }
+        // ---------------------------------
 
 
         // Notifications dropdown (existing logic preserved)
@@ -632,6 +661,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         }
                         
                         if (targetUrl) {
+                            showIframeLoader(); // <-- ADDED
                             window.frames['content_frame'].location.replace(targetUrl);
                             updateHash(targetUrl);
                             setActiveLink(targetUrl);
@@ -644,6 +674,8 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const searchUrl = 'dashboard_home.php?search=' + encodeURIComponent(this.value);
+                    
+                    showIframeLoader(); // <-- ADDED
                     window.frames['content_frame'].location.replace(searchUrl);
                     updateHash(searchUrl);
                     setActiveLink('dashboard_home.php'); // Search results usually belong to the dashboard home context
@@ -653,7 +685,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         }
 
         // Keep iframe height synced (defensive, existing logic preserved)
-        const iframe = document.querySelector('iframe[name="content_frame"]');
+        // iframe is defined globally
         function resizeFrame() {
             if (!iframe) return;
             // Calculate main content height (viewport height - header height)
@@ -680,13 +712,15 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             const hashMatch = window.location.hash.match(/#page=([^&]+)/);
             if (hashMatch) {
                 const targetUrl = decodeURIComponent(hashMatch[1]);
-                const iframe = window.frames['content_frame'];
-                if (iframe && iframe.location.href.split('?')[0].split('#')[0] !== targetUrl.split('?')[0].split('#')[0]) {
-                    iframe.location.replace(targetUrl);
+                const iframeWindow = window.frames['content_frame'];
+                if (iframeWindow && iframeWindow.location.href.split('?')[0].split('#')[0] !== targetUrl.split('?')[0].split('#')[0]) {
+                    showIframeLoader(); // <-- ADDED
+                    iframeWindow.location.replace(targetUrl);
                     setActiveLink(targetUrl);
                 }
             } else {
                 // If hash is cleared, go to default page
+                showIframeLoader(); // <-- ADDED
                 window.frames['content_frame'].location.replace(defaultPage);
                 setActiveLink(defaultPage);
             }
