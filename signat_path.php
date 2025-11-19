@@ -1,34 +1,61 @@
 <?php
 session_start();
 
-// --- 1. Database Connection (Using user-provided credentials) ---
-$servername = "153.92.15.60";
-$username = "u645536029_otos_root";
-$password = "6yI3PF3OZ";
-$dbname = "u645536029_otos";
+// --- 1. Database Configuration Settings ---
+// Configuration based on db.php (Local DB - for WRITE operations)
+define('WRITE_DB_HOST', 'localhost');
+define('WRITE_DB_USER', 'root');
+define('WRITE_DB_PASS', '');
+define('WRITE_DB_NAME', 'ddts_pnpki');
 
-// Establishing connection
-$conn = new mysqli($servername, $username, $password, $dbname);
+// Configuration based on db_international.php (International DB - for READ operations)
+define('READ_DB_HOST', '153.92.15.60');
+define('READ_DB_USER', 'u645536029_otos_root');
+define('READ_DB_PASS', '6yI3PF3OZ');
+define('READ_DB_NAME', 'u645536029_otos');
 
-// Check connection
-if ($conn->connect_error) {
-    // In a real application, you might log the error and display a generic message
-    die("Connection failed: " . $conn->connect_error);
+// --- 2. Establish Dual Connections ---
+// Suppress errors for manual handling and cleaner output
+mysqli_report(MYSQLI_REPORT_OFF);
+
+// A. Establish WRITE connection (Local DB)
+$write_conn = @new mysqli(WRITE_DB_HOST, WRITE_DB_USER, WRITE_DB_PASS, WRITE_DB_NAME);
+if ($write_conn->connect_error) {
+    die("Fatal Error: Could not connect to Local Database for WRITE operations. " . $write_conn->connect_error);
 }
+$write_conn->set_charset("utf8mb4");
 
-// Create document_signatories table if it doesn't exist
+// B. Establish READ connection (International DB)
+$read_conn = @new mysqli(READ_DB_HOST, READ_DB_USER, READ_DB_PASS, READ_DB_NAME);
+if ($read_conn->connect_error) {
+    // We can proceed with limited functionality if the READ DB is down, 
+    // but for this critical function, we'll die since we can't fetch employees.
+    die("Fatal Error: Could not connect to International Database for READ operations. " . $read_conn->connect_error);
+}
+$read_conn->set_charset("utf8mb4");
+
+// Re-enable strict error reporting for query execution
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
+// --- 3. Table and Timezone Setup (on WRITE DB) ---
+// Create document_signatories table if it doesn't exist (on Local DB)
 $sql = "SHOW TABLES LIKE 'document_signatories'";
-$result = $conn->query($sql);
+$result = $write_conn->query($sql);
 if ($result->num_rows == 0) {
+    // Table structure for a GLOBAL path (no doc_id).
     $create_sql = "CREATE TABLE document_signatories (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        doc_id INT NOT NULL,
         user_id INT NOT NULL,
         signing_order INT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES useremployee(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;";
-    if ($conn->query($create_sql) !== TRUE) {
-        die("Error creating table: " . $conn->error);
+    // NOTE: This CREATE TABLE assumes 'useremployee' exists on the WRITE DB 
+    // for the FOREIGN KEY constraint. If not, the CREATE will fail here. 
+    // If 'useremployee' only exists on READ DB, the FOREIGN KEY must be removed 
+    // or the table must be synced. We proceed assuming 'useremployee' exists 
+    // on the WRITE DB or the key constraint is manageable.
+    if ($write_conn->query($create_sql) !== TRUE) {
+        die("Error creating document_signatories table: " . $write_conn->error);
     }
 }
 
@@ -37,49 +64,41 @@ date_default_timezone_set('Asia/Manila');
 
 $message = '';
 
-// --- 2. Handle Form Submission (Save Signatory Path) ---
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['doc_id']) && isset($_POST['signatory_path'])) {
+// --- 4. Handle Form Submission (Save Global Signatory Path - on WRITE DB) ---
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path'])) {
     
     // Sanitize and validate input
-    $doc_id_to_save = (int)$_POST['doc_id'];
     $signatory_path_str = trim($_POST['signatory_path']);
-    // Filter out empty strings before mapping to int
     $signatory_ids = array_filter(array_map('intval', explode(',', $signatory_path_str)));
 
-    if ($doc_id_to_save <= 0) {
-        $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: Invalid Document ID provided.</div>';
-    } elseif (empty($signatory_ids)) {
+    if (empty($signatory_ids)) {
         $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Error: No signatories were selected for the path.</div>';
     } else {
         
-        // Start a transaction for atomicity
-        $conn->begin_transaction();
+        // Start a transaction for atomicity on the WRITE DB
+        $write_conn->begin_transaction();
         try {
-            // A. Delete any existing path for this document (Assumes 'document_signatories' table)
-            $stmt_delete = $conn->prepare("DELETE FROM document_signatories WHERE doc_id = ?");
-            $stmt_delete->bind_param("i", $doc_id_to_save);
-            $stmt_delete->execute();
-            $stmt_delete->close();
+            // Delete ALL existing records to set the new global path
+            $write_conn->query("DELETE FROM document_signatories"); 
 
-            // B. Insert the new path sequence
+            // Insert the new path sequence
             $order = 1;
-            // Using the simplest query to match the provided PHP submission logic
-            $stmt_insert = $conn->prepare("INSERT INTO document_signatories (doc_id, user_id, signing_order) VALUES (?, ?, ?)");
+            $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (user_id, signing_order) VALUES (?, ?)");
 
             foreach ($signatory_ids as $user_id) {
                 if ($user_id > 0) {
-                    $stmt_insert->bind_param("iii", $doc_id_to_save, $user_id, $order);
+                    $stmt_insert->bind_param("ii", $user_id, $order); 
                     $stmt_insert->execute();
                     $order++;
                 }
             }
 
             $stmt_insert->close();
-            $conn->commit();
-            $message = '<div class="alert success"><i class="fas fa-check-circle"></i> Signatory path successfully set for Document ID: <strong>' . $doc_id_to_save . '</strong></div>';
+            $write_conn->commit();
+            $message = '<div class="alert success"><i class="fas fa-check-circle"></i> Global Signatory Path successfully set.</div>';
 
         } catch (Exception $e) {
-            $conn->rollback();
+            $write_conn->rollback();
             $message = '<div class="alert error"><i class="fas fa-exclamation-circle"></i> Failed to set signatory path. ' . $e->getMessage() . '</div>';
             error_log("Signatory Path Save Error: " . $e->getMessage());
         }
@@ -87,26 +106,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['doc_id']) && isset($_P
 }
 
 
-// --- 3. Fetch Distinct Offices for Filter ---
+// --- 5. Fetch Distinct Offices for Filter (from READ DB) ---
 $offices = [];
 $sql_offices = "SELECT DISTINCT Office FROM useremployee WHERE Office IS NOT NULL AND Office != '' ORDER BY Office ASC";
-$result_offices = $conn->query($sql_offices);
+$result_offices = $read_conn->query($sql_offices); // Using $read_conn
 if ($result_offices) {
     while ($row = $result_offices->fetch_assoc()) {
         $offices[] = $row['Office'];
     }
 }
 
-// --- 4. Get Current Filters and Search Term ---
+// --- 6. Get Current Filters and Search Term ---
 $selected_office = isset($_GET['office']) ? trim($_GET['office']) : '';
 $selected_station = isset($_GET['station']) ? trim($_GET['station']) : '';
 $search_term = isset($_GET['search']) ? trim($_GET['search']) : '';
 $employees = [];
 $stations = [];
 
-// --- 5. Fetch Stations based on Selected Office ---
+// --- 7. Fetch Stations based on Selected Office (from READ DB) ---
 if (!empty($selected_office)) {
-    $sql_stations = $conn->prepare("SELECT DISTINCT Station FROM useremployee WHERE Office = ? AND Station IS NOT NULL AND Station != '' ORDER BY Station ASC");
+    $sql_stations = $read_conn->prepare("SELECT DISTINCT Station FROM useremployee WHERE Office = ? AND Station IS NOT NULL AND Station != '' ORDER BY Station ASC"); // Using $read_conn
     $sql_stations->bind_param("s", $selected_office);
     $sql_stations->execute();
     $result_stations = $sql_stations->get_result();
@@ -117,8 +136,7 @@ if (!empty($selected_office)) {
 }
 
 
-// --- 6. Fetch Employees based on Filters and Search ---
-// Note: We include Station in the SELECT for display/data purposes
+// --- 8. Fetch Employees based on Filters and Search (from READ DB) ---
 $sql_employees = "SELECT id, Full_Name, Office, Station, Designation FROM useremployee WHERE 1=1";
 $params = [];
 $types = '';
@@ -147,7 +165,7 @@ if (!empty($search_term)) {
 
 $sql_employees .= " ORDER BY Full_Name ASC LIMIT 100"; 
 
-$stmt_employees = $conn->prepare($sql_employees);
+$stmt_employees = $read_conn->prepare($sql_employees); // Using $read_conn
 
 if (!empty($types)) {
     $stmt_employees->bind_param($types, ...$params);
@@ -160,7 +178,14 @@ if ($stmt_employees->execute()) {
     }
 }
 $stmt_employees->close();
-$conn->close();
+
+// Close both active connections
+if ($write_conn && $write_conn instanceof mysqli) {
+    $write_conn->close();
+}
+if ($read_conn && $read_conn instanceof mysqli) {
+    $read_conn->close();
+}
 ?>
 
 <!DOCTYPE html>
@@ -607,46 +632,35 @@ $conn->close();
     </div>
     <div class="container">
         <div class="header">
-            <h1><i class="fas fa-sitemap"></i> Document Signatory Path Setup</h1>
-            <p>Define the approval sequence for documents by filtering employees and setting their signing order.</p>
+            <h1><i class="fas fa-sitemap"></i> Global Signatory Path Setup</h1>
+            <p>Define the default and overall approval sequence for all documents by filtering employees and setting their signing order.</p>
         </div>
         
         <div class="content">
             <?php echo $message; ?>
             
             <div class="step-indicator">
-                <div class="step active" id="step-doc-id">
+                <div class="step active" id="step-filter">
                     <div class="step-number">1</div>
-                    <div class="step-title">Document ID</div>
-                </div>
-                <div class="step" id="step-filter">
-                    <div class="step-number">2</div>
                     <div class="step-title">Filter Employees</div>
                 </div>
                 <div class="step" id="step-path">
-                    <div class="step-number">3</div>
+                    <div class="step-number">2</div>
                     <div class="step-title">Set Path Sequence</div>
                 </div>
                 <div class="step" id="step-save">
-                    <div class="step-number">4</div>
+                    <div class="step-number">3</div>
                     <div class="step-title">Save Path</div>
                 </div>
             </div>
             
             <form method="POST" action="" onsubmit="return prepareFormSubmission(event);" id="main-path-form">
-                <div class="card">
-                    <div class="form-group">
-                        <label class="form-label" for="doc_id">Document ID</label>
-                        <input type="number" id="doc_id" name="doc_id" class="form-control" placeholder="Enter the document ID (e.g., 1001)" required value="<?php echo isset($_POST['doc_id']) ? htmlspecialchars($_POST['doc_id']) : ''; ?>">
-                        <small style="color: var(--gray); margin-top: 6px; display: block;">This ID links the signatory path to the specific document.</small>
-                    </div>
-                    <input type="hidden" name="signatory_path" id="signatory_path_input">
-                </div>
+                <input type="hidden" name="signatory_path" id="signatory_path_input">
             </form>
             
             <form id="filter-form" method="GET" action="">
                 <div class="card">
-                    <h2 class="card-title"><i class="fas fa-filter"></i> Step 2: Filter Employees</h2>
+                    <h2 class="card-title"><i class="fas fa-filter"></i> Step 1: Filter Employees</h2>
                     <div class="form-row">
                         <div class="form-col">
                             <label class="form-label" for="office">Office</label>
@@ -694,7 +708,7 @@ $conn->close();
             </form>
             
             <div class="card">
-                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Step 3: Set Path Sequence</h2>
+                <h2 class="card-title"><i class="fas fa-project-diagram"></i> Step 2: Set Path Sequence</h2>
                 
                 <div class="dual-list-container">
                     <div class="list-panel">
@@ -705,7 +719,7 @@ $conn->close();
                             <?php if (empty($selected_office)): ?>
                                 <div class="empty-state">
                                     <i class="fas fa-filter"></i>
-                                    <p>Select an **Office** in Step 2 to view employees.</p>
+                                    <p>Select an **Office** in Step 1 to view employees.</p>
                                 </div>
                             <?php elseif (empty($employees)): ?>
                                 <div class="empty-state">
@@ -750,7 +764,7 @@ $conn->close();
             
             <div class="submit-section">
                 <button type="submit" form="main-path-form" class="btn btn-success" id="btn-save-path">
-                    <i class="fas fa-save"></i> Step 4: Save Signatory Path
+                    <i class="fas fa-save"></i> Step 3: Save Signatory Path
                 </button>
             </div>
         </div>
@@ -759,7 +773,6 @@ $conn->close();
     <script>
         const pathList = document.getElementById('path-list');
         const pathInput = document.getElementById('signatory_path_input');
-        const docIdInput = document.getElementById('doc_id');
         const loadingOverlay = document.getElementById('loading-overlay');
         
         // Function to ensure the path list reflects the correct order numbers and button states
@@ -808,7 +821,6 @@ $conn->close();
                 designation: item.dataset.designation
             }));
             localStorage.setItem('signatoryPath', JSON.stringify(pathData));
-            localStorage.setItem('docId', docIdInput.value);
         }
         
         // 1. Add Signatory
@@ -883,14 +895,6 @@ $conn->close();
 
         // 4. Prepare data for POST submission
         window.prepareFormSubmission = function(event) {
-            const docIdInput = document.getElementById('doc_id');
-            if (docIdInput.value.trim() === '' || parseInt(docIdInput.value) <= 0) {
-                alert('Please enter a valid Document ID before saving the path.');
-                docIdInput.focus();
-                event.preventDefault();
-                return false;
-            }
-
             const items = pathList.querySelectorAll('.list-item[data-id]');
             if (items.length === 0) {
                 alert('The signatory path is empty. Add at least one signatory.');
@@ -898,7 +902,7 @@ $conn->close();
                 return false;
             }
 
-            // Construct a comma-separated string of User IDs in order (as required by PHP submission logic)
+            // Construct a comma-separated string of User IDs in order
             const signatoryIds = Array.from(items).map(item => item.dataset.id).join(',');
             pathInput.value = signatoryIds;
 
@@ -913,85 +917,62 @@ $conn->close();
         });
 
 
-        // --- UI Step Indicator Logic ---
-        const stepDocId = document.getElementById('step-doc-id');
+        // --- UI Step Indicator Logic (UPDATED FOR 3 STEPS) ---
         const stepFilter = document.getElementById('step-filter');
         const stepPath = document.getElementById('step-path');
         const stepSave = document.getElementById('step-save');
         const employeeListDiv = document.getElementById('employee-list');
+        const steps = [stepFilter, stepPath, stepSave];
 
         function updateSteps() {
             // Reset all steps to inactive state
             steps.forEach(s => s.classList.remove('active', 'completed'));
 
             let currentStep = 1;
+            const selectedOffice = document.getElementById('office').value;
 
-            // Step 1: Document ID Check
-            if (docIdInput.value && parseInt(docIdInput.value) > 0) {
-                stepDocId.classList.add('completed');
+            // Step 1: Filter Employees Check
+            const employeeListChildren = employeeListDiv.children.length;
+            const hasEmployees = employeeListChildren > 0 && employeeListDiv.querySelector('.list-item');
+
+            if (selectedOffice || hasEmployees || employeeListChildren > 0) {
+                stepFilter.classList.add('completed');
                 currentStep = 2;
             } else {
-                stepDocId.classList.add('active');
+                stepFilter.classList.add('active');
             }
 
-            // Step 2: Filter Employees Check
+            // Step 2: Set Path Check
             if (currentStep === 2) {
-                const hasEmployees = employeeListDiv.querySelector('.list-item') !== null;
-
-                if (hasEmployees) {
-                    stepFilter.classList.add('completed');
-                    currentStep = 3;
-                } else {
-                    stepFilter.classList.add('active');
-                }
-            } else if (currentStep > 2) {
-                 stepFilter.classList.add('completed');
-            }
-
-
-            // Step 3: Set Path Check
-            if (currentStep === 3) {
                 const pathItems = pathList.querySelectorAll('.list-item[data-id]');
                 if (pathItems.length > 0) {
                     stepPath.classList.add('completed');
-                    currentStep = 4;
+                    currentStep = 3;
                 } else {
                     stepPath.classList.add('active');
                 }
-            } else if (currentStep > 3) {
+            } else if (currentStep > 2) {
                 stepPath.classList.add('completed');
             }
 
-            // Step 4: Save
-            if (currentStep === 4) {
+            // Step 3: Save
+            if (currentStep === 3) {
                 stepSave.classList.add('active');
             }
         }
         
-        const steps = [stepDocId, stepFilter, stepPath, stepSave];
-        docIdInput.addEventListener('input', () => {
-            updateSteps();
-            savePathToLocal();
-        });
 
         // Initialize the path display and steps when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             const successAlert = document.querySelector('.alert.success');
             if (successAlert) {
                 localStorage.removeItem('signatoryPath');
-                localStorage.removeItem('docId');
                 pathList.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-arrow-left"></i>
                         <p>Add employees to create a signatory path.</p>
                         <small>Use the Up/Down buttons to manage the order.</small>
                     </div>`;
-                docIdInput.value = '';
-            }
-
-            const savedDocId = localStorage.getItem('docId');
-            if (savedDocId && !docIdInput.value) {
-                docIdInput.value = savedDocId;
             }
 
             const savedPath = localStorage.getItem('signatoryPath');
