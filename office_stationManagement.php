@@ -108,7 +108,6 @@ if (isset($_GET['api'])) {
 
                 $conn = get_local_db_connection();
                 
-                // FIX APPLIED HERE: 
                 // Direct selection from document_signatories using batch_id.
                 $sql = $conn->prepare("
                     SELECT doc_id, user_id, signing_order, full_name, 
@@ -405,8 +404,7 @@ if (isset($_GET['api'])) {
             <div class="text-sm text-gray-600 mb-4">List of individuals assigned to sign documents for this Office-Station pair (Local ID: <span id="current-batch-id" class="font-semibold"></span>).</div>
             
             <div id="signatories-list-container" class="max-h-96 overflow-y-auto">
-                <p id="no-signatories-message" class="text-center p-8 text-gray-500 hidden">No signatories found for this batch ID.</p>
-            </div>
+                </div>
 
             <div class="mt-6 flex justify-end">
                 <button type="button" onclick="closeModal('signatories-modal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Close</button>
@@ -756,18 +754,19 @@ if (isset($_GET['api'])) {
             lucide.createIcons();
         };
 
-        // --- SIGNATORIES MODAL LOGIC (UPDATED: TABLE VIEW) ---
+        // --- SIGNATORIES MODAL LOGIC (FIXED: Table View with Dynamic Empty State) ---
 
         const renderSignatories = (signatories) => {
             const container = document.getElementById('signatories-list-container');
-            const noSignatoriesMsg = document.getElementById('no-signatories-message');
+            
+            // Clear previous content completely
             container.innerHTML = '';
 
+            // If no data, inject the empty state message directly
             if (signatories.length === 0) {
-                noSignatoriesMsg.classList.remove('hidden');
+                container.innerHTML = '<p class="text-center p-8 text-gray-500">No signatories found for this batch ID.</p>';
                 return;
             }
-            noSignatoriesMsg.classList.add('hidden');
 
             const totalSignatories = signatories.length;
 
