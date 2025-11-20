@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 19, 2025 at 10:11 AM
+-- Generation Time: Nov 20, 2025 at 10:23 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -93,12 +93,9 @@ CREATE TABLE `document_signatories` (
 --
 
 INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `office_assigned`, `station_assigned`, `assigned_at`, `office_id`, `station_id`, `batch_id`, `full_name`) VALUES
-(35, 852, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 08:59:20', NULL, NULL, 30, 'Albe D. Morden'),
-(36, 853, 2, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 08:59:20', NULL, NULL, 30, 'Alberto C. Cahilog, Jr'),
-(37, 57, 3, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 08:59:20', NULL, NULL, 30, 'ANTHONIE FENY V. CATALAN'),
-(38, 852, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 09:08:43', NULL, NULL, 31, 'Albe D. Morden'),
-(39, 853, 2, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 09:08:43', NULL, NULL, 31, 'Alberto C. Cahilog, Jr'),
-(40, 57, 3, 'REGIONAL OFFICE', 'RO PMD', '2025-11-19 09:08:43', NULL, NULL, 31, 'ANTHONIE FENY V. CATALAN');
+(49, 58, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-20 08:59:41', NULL, NULL, 32, 'MARIETTA L. CHUA'),
+(50, 56, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-20 09:05:14', NULL, NULL, 31, 'MARY KATHLEEN P. PO'),
+(51, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-11-20 09:05:14', NULL, NULL, 31, 'Claudio A. Nistal, Jr.');
 
 -- --------------------------------------------------------
 
@@ -117,7 +114,8 @@ CREATE TABLE `office_station` (
 --
 
 INSERT INTO `office_station` (`id`, `office`, `station`) VALUES
-(31, 'REGIONAL OFFICE', 'RO PMD');
+(31, 'REGIONAL OFFICE', 'RO PMD'),
+(32, 'REGIONAL OFFICE', 'RO ASD');
 
 -- --------------------------------------------------------
 
@@ -229,13 +227,13 @@ ALTER TABLE `document_files`
 -- AUTO_INCREMENT for table `document_signatories`
 --
 ALTER TABLE `document_signatories`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=41;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=52;
 
 --
 -- AUTO_INCREMENT for table `office_station`
 --
 ALTER TABLE `office_station`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
 
 --
 -- AUTO_INCREMENT for table `users`
