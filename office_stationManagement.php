@@ -107,15 +107,17 @@ if (isset($_GET['api'])) {
                 if (!$id) throw new Exception("No ID provided for signatories");
 
                 $conn = get_local_db_connection();
-                // Join document_signatories with office_station using batch_id = office_station.id
+                
+                // FIX APPLIED HERE: 
+                // Direct selection from document_signatories using batch_id.
                 $sql = $conn->prepare("
-                    SELECT ds.doc_id, ds.user_id, ds.signing_order, ds.full_name, 
-                           ds.office_assigned, ds.station_assigned
-                    FROM document_signatories ds
-                    INNER JOIN office_station os ON ds.batch_id = os.id
-                    WHERE os.id = ?
-                    ORDER BY ds.signing_order ASC
+                    SELECT doc_id, user_id, signing_order, full_name, 
+                           office_assigned, station_assigned
+                    FROM document_signatories
+                    WHERE batch_id = ?
+                    ORDER BY signing_order ASC
                 ");
+                
                 $sql->bind_param("i", $id);
                 $sql->execute();
                 $result = $sql->get_result();
@@ -393,7 +395,7 @@ if (isset($_GET['api'])) {
     </div>
 
     <div id="signatories-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden flex items-center justify-center p-4 z-50 transition-opacity duration-300 ease-out">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 transform scale-95 transition-transform duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 transform scale-95 transition-transform duration-300">
             <div class="flex justify-between items-center border-b pb-4 mb-4">
                 <h3 id="signatories-modal-title" class="text-2xl font-bold text-gray-800 flex items-center">
                     <i data-lucide="users-round" class="w-6 h-6 mr-2 text-blue-600"></i> Assigned Signatories
@@ -401,9 +403,11 @@ if (isset($_GET['api'])) {
                 <button onclick="closeModal('signatories-modal')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             <div class="text-sm text-gray-600 mb-4">List of individuals assigned to sign documents for this Office-Station pair (Local ID: <span id="current-batch-id" class="font-semibold"></span>).</div>
-            <div id="signatories-list-container" class="space-y-2 max-h-96 overflow-y-auto">
+            
+            <div id="signatories-list-container" class="max-h-96 overflow-y-auto">
                 <p id="no-signatories-message" class="text-center p-8 text-gray-500 hidden">No signatories found for this batch ID.</p>
-                </div>
+            </div>
+
             <div class="mt-6 flex justify-end">
                 <button type="button" onclick="closeModal('signatories-modal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Close</button>
             </div>
@@ -752,7 +756,7 @@ if (isset($_GET['api'])) {
             lucide.createIcons();
         };
 
-        // --- SIGNATORIES MODAL LOGIC ---
+        // --- SIGNATORIES MODAL LOGIC (UPDATED: TABLE VIEW) ---
 
         const renderSignatories = (signatories) => {
             const container = document.getElementById('signatories-list-container');
@@ -766,7 +770,24 @@ if (isset($_GET['api'])) {
             noSignatoriesMsg.classList.add('hidden');
 
             const totalSignatories = signatories.length;
-            const html = signatories.map((s, index) => {
+
+            // Create Table Structure
+            let tableHtml = `
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Signatory Name</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Office/Station</th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+            `;
+
+            // Loop through signatories to create rows
+            tableHtml += signatories.map((s, index) => {
                 const docId = s.doc_id;
                 const order = s.signing_order;
                 
@@ -774,36 +795,47 @@ if (isset($_GET['api'])) {
                 const moveDownDisabled = order === totalSignatories;
 
                 return `
-                    <div class="list-item bg-gray-50 p-4 rounded-lg flex justify-between items-center border border-gray-200 hover:bg-gray-100">
-                        <div class="flex items-center space-x-4 min-w-0">
-                            <span class="text-2xl font-bold text-blue-600 w-8 flex-shrink-0">${order}.</span>
-                            <div class="min-w-0">
-                                <p class="font-semibold text-gray-800 truncate" title="${s.full_name}">${s.full_name}</p>
-                                <p class="text-xs text-gray-500">${s.office_assigned} / ${s.station_assigned} (Doc ID: ${docId})</p>
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-lg font-bold text-blue-600">${order}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900">${s.full_name}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-600">${s.office_assigned}</div>
+                            <div class="text-xs text-gray-500">${s.station_assigned} <span class="text-gray-400 ml-1">(ID: ${docId})</span></div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div class="flex justify-end space-x-2">
+                                <button onclick="moveSignatory(${docId}, ${order}, ${order - 1})" 
+                                    class="p-1.5 rounded-full transition-colors ${moveUpDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-yellow-600 hover:bg-yellow-100'}" 
+                                    title="Move Up" ${moveUpDisabled ? 'disabled' : ''}>
+                                    <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                                </button>
+                                <button onclick="moveSignatory(${docId}, ${order}, ${order + 1})" 
+                                    class="p-1.5 rounded-full transition-colors ${moveDownDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-yellow-600 hover:bg-yellow-100'}" 
+                                    title="Move Down" ${moveDownDisabled ? 'disabled' : ''}>
+                                    <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                                </button>
+                                <button onclick="editSignatory(${docId}, ${order})" 
+                                    class="p-1.5 rounded-full text-blue-600 hover:bg-blue-100 transition-colors" 
+                                    title="Edit Signatory">
+                                    <i data-lucide="pencil" class="w-5 h-5"></i>
+                                </button>
                             </div>
-                        </div>
-                        <div class="flex space-x-1 flex-shrink-0">
-                            <button onclick="moveSignatory(${docId}, ${order}, ${order - 1})" 
-                                class="p-2 rounded-full transition-colors ${moveUpDisabled ? 'text-gray-400 cursor-not-allowed' : 'text-yellow-600 hover:bg-yellow-50'}" 
-                                title="Move Up" ${moveUpDisabled ? 'disabled' : ''}>
-                                <i data-lucide="chevron-up" class="w-5 h-5"></i>
-                            </button>
-                            <button onclick="moveSignatory(${docId}, ${order}, ${order + 1})" 
-                                class="p-2 rounded-full transition-colors ${moveDownDisabled ? 'text-gray-400 cursor-not-allowed' : 'text-yellow-600 hover:bg-yellow-50'}" 
-                                title="Move Down" ${moveDownDisabled ? 'disabled' : ''}>
-                                <i data-lucide="chevron-down" class="w-5 h-5"></i>
-                            </button>
-                            <button onclick="editSignatory(${docId}, ${order})" 
-                                class="p-2 rounded-full text-blue-600 hover:bg-blue-50 transition-colors" 
-                                title="Edit Signatory">
-                                <i data-lucide="pencil" class="w-5 h-5"></i>
-                            </button>
-                        </div>
-                    </div>
+                        </td>
+                    </tr>
                 `;
             }).join('');
+
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
             
-            container.innerHTML = html;
+            container.innerHTML = tableHtml;
             lucide.createIcons();
         };
         

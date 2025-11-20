@@ -83,7 +83,7 @@ if ($result_check_table->num_rows == 0) {
 date_default_timezone_set('Asia/Manila');
 $message = '';
 
-// --- 4. Handle Form Submission (UPDATED) ---
+// --- 4. Handle Form Submission (UPDATED WITH FIX) ---
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path_data'])) {
     
     $signatory_path_json = $_POST['signatory_path_data'];
@@ -95,10 +95,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['signatory_path_data'])
         
         $write_conn->begin_transaction();
         try {
-            // 1. Clear existing entries
-            // Note: This clears ALL entries. If you only want to clear for this specific batch,
-            // change to: "DELETE FROM document_signatories WHERE batch_id = ?"
-            $write_conn->query("DELETE FROM document_signatories"); 
+            // 1. Clear existing entries ONLY for this specific Batch ID
+            // FIX APPLIED HERE: Now uses DELETE WHERE batch_id = ?
+            $stmt_delete = $write_conn->prepare("DELETE FROM document_signatories WHERE batch_id = ?");
+            $stmt_delete->bind_param("i", $batch_id);
+            $stmt_delete->execute();
+            $stmt_delete->close();
 
             // 2. Insert with batch_id and full_name
             $stmt_insert = $write_conn->prepare("INSERT INTO document_signatories (batch_id, user_id, full_name, signing_order, office_assigned, station_assigned) VALUES (?, ?, ?, ?, ?, ?)");
@@ -1080,9 +1082,5 @@ if ($read_conn) $read_conn->close();
         document.addEventListener('submit', saveScroll, true);
     })();
     </script>
-
-    
-
-
 </body>
 </html>
