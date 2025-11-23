@@ -180,10 +180,6 @@ if (isset($_GET['api'])) {
                         WHERE doc_id IN (?, ?) AND batch_id = ?
                     ");
                     
-                    /**
-                     * FIXED: Changed "iiiiii" to "iiiiiii" (7 integers) 
-                     * to match the 7 variables bound below.
-                     */
                     $sql_swap->bind_param(
                         "iiiiiii", 
                         $doc_id, $new_order, 
@@ -428,6 +424,12 @@ if (isset($_GET['api'])) {
     </div>
 
     <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-3 pointer-events-none"></div>
+
+    <div id="global-loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-[60] hidden flex flex-col items-center justify-center transition-opacity duration-300 backdrop-blur-sm">
+        <div class="animate-spin inline-block w-16 h-16 border-[6px] border-blue-500 border-t-transparent rounded-full mb-4 shadow-lg"></div>
+        <h2 class="text-white text-xl font-semibold tracking-wide animate-pulse">Loading Signatory Setup...</h2>
+        <p class="text-gray-300 text-sm mt-2">Please wait while we redirect you.</p>
+    </div>
 
     <script>
         // --- GLOBAL DATA ---
@@ -733,7 +735,7 @@ if (isset($_GET['api'])) {
                         <h4 class="text-xl font-bold text-gray-800 mb-2">${r.office}</h4>
                         <div class="flex space-x-1">
                             
-                            <a href="signat_path.php?id=${r.id}" class="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition-colors" title="Assign Signatory">
+                            <a href="#" onclick="navigateToSignatory(event, ${r.id})" class="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition-colors" title="Assign Signatory">
                                 <i data-lucide="square-pen" class="w-5 h-5"></i>
                             </a>
                             
@@ -892,6 +894,21 @@ if (isset($_GET['api'])) {
 
 
         // --- UI HANDLERS ---
+        
+        /**
+         * NEW: Handles navigation with a loading overlay
+         */
+        window.navigateToSignatory = (event, id) => {
+            event.preventDefault(); // Stop the default link click immediately
+            
+            const overlay = document.getElementById('global-loading-overlay');
+            overlay.classList.remove('hidden'); // Show the loading screen
+            
+            // Small timeout to ensure the browser paints the overlay before freezing for navigation
+            setTimeout(() => {
+                window.location.href = `signat_path.php?id=${id}`;
+            }, 100); 
+        };
 
         window.openModal = (id) => {
             const modal = document.getElementById(id);
