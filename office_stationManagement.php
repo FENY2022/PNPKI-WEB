@@ -180,8 +180,12 @@ if (isset($_GET['api'])) {
                         WHERE doc_id IN (?, ?) AND batch_id = ?
                     ");
                     
+                    /**
+                     * FIXED: Changed "iiiiii" to "iiiiiii" (7 integers) 
+                     * to match the 7 variables bound below.
+                     */
                     $sql_swap->bind_param(
-                        "iiiiii", 
+                        "iiiiiii", 
                         $doc_id, $new_order, 
                         $other_doc_id, $current_order, 
                         $doc_id, $other_doc_id, 
