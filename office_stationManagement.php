@@ -1,7 +1,7 @@
 <?php
 /**
  * SINGLE PAGE APPLICATION: Office & Station Management
- * Feature: Cascading Dropdowns (Office -> Station), Local Data Management, and Signatory Order Swapping
+ * Feature: Cascading Dropdowns (Office -> Station), Local Data Management, Signatory Order Swapping, and Service Status
  */
 
 declare(strict_types=1);
@@ -91,7 +91,8 @@ if (isset($_GET['api'])) {
             // API: Get Records from the NEW LOCAL TABLE (for card display)
             case 'get_local_records':
                 $conn = get_local_db_connection();
-                $sql = "SELECT id, office, station FROM office_station ORDER BY id DESC";
+                // Updated to fetch service dates
+                $sql = "SELECT id, office, station, service_start, service_end FROM office_station ORDER BY id DESC";
                 $result = $conn->query($sql);
                 $records = [];
                 while ($row = $result->fetch_assoc()) {
@@ -210,7 +211,7 @@ if (isset($_GET['api'])) {
                 }
                 break;
             
-            // API: Delete Signatory (Removes row and reorders subsequent items)
+            // API: Delete Signatory
             case 'delete_signatory':
                 $doc_id = isset($input['doc_id']) ? intval($input['doc_id']) : null;
                 if (!$doc_id) throw new Exception("No Doc ID provided");
@@ -219,7 +220,6 @@ if (isset($_GET['api'])) {
                 $conn->begin_transaction();
 
                 try {
-                    // 1. Get info before delete to handle reordering
                     $sql_info = $conn->prepare("SELECT batch_id, signing_order FROM document_signatories WHERE doc_id = ?");
                     $sql_info->bind_param("i", $doc_id);
                     $sql_info->execute();
@@ -231,12 +231,10 @@ if (isset($_GET['api'])) {
                     $batch_id = $row['batch_id'];
                     $deleted_order = $row['signing_order'];
 
-                    // 2. Delete the record
                     $sql_del = $conn->prepare("DELETE FROM document_signatories WHERE doc_id = ?");
                     $sql_del->bind_param("i", $doc_id);
                     if (!$sql_del->execute()) throw new Exception("Delete failed: " . $conn->error);
 
-                    // 3. Reorder remaining signatories (Shift everyone below the deleted one UP by 1)
                     $sql_reorder = $conn->prepare("UPDATE document_signatories SET signing_order = signing_order - 1 WHERE batch_id = ? AND signing_order > ?");
                     $sql_reorder->bind_param("ii", $batch_id, $deleted_order);
                     if (!$sql_reorder->execute()) throw new Exception("Reordering failed: " . $conn->error);
@@ -251,13 +249,17 @@ if (isset($_GET['api'])) {
                 }
                 break;
 
-            // API: Save Record - Now saves to the LOCAL table 'office_station' with conditional duplication of signatories
+            // API: Save Record - UPDATED to handle Service Dates
             case 'save_record':
                 if (!$input) throw new Exception("No data received");
                 $office = $input['office'];
                 $station = $input['station'];
+                
+                // Get Dates (Handle empty strings as NULL)
+                $service_start = !empty($input['service_start']) ? $input['service_start'] : null;
+                $service_end = !empty($input['service_end']) ? $input['service_end'] : null;
+
                 // Check for optional source_id for duplication
-                // This is NULL if the user chose "Without Signatories" or if it's a new record
                 $source_id = isset($input['source_id']) ? intval($input['source_id']) : null; 
 
                 // 1. Get LOCAL DB Connection
@@ -268,20 +270,24 @@ if (isset($_GET['api'])) {
                     // 2. Sanitize and Prepare
                     $office_clean = $conn->real_escape_string($office);
                     $station_clean = $conn->real_escape_string($station);
+                    
+                    // Handle NULLs for SQL
+                    $start_clean = $service_start ? "'".$conn->real_escape_string($service_start)."'" : "NULL";
+                    $end_clean = $service_end ? "'".$conn->real_escape_string($service_end)."'" : "NULL";
 
-                    // 3. Insert into LOCAL table 'office_station'
-                    $sql_office = "INSERT INTO office_station (office, station) VALUES ('$office_clean', '$station_clean')";
+                    // 3. Insert into LOCAL table 'office_station' with Dates
+                    $sql_office = "INSERT INTO office_station (office, station, service_start, service_end) 
+                                   VALUES ('$office_clean', '$station_clean', $start_clean, $end_clean)";
                     
                     if (!$conn->query($sql_office)) {
                         throw new Exception("Failed to insert office_station: " . $conn->error);
                     }
 
                     $new_batch_id = $conn->insert_id;
-                    $message = 'Record saved successfully to local DB'; // Default message
+                    $message = 'Record saved successfully to local DB'; 
 
-                    // 4. CONDITIONAL: Duplicate Signatories if source_id is provided
+                    // 4. CONDITIONAL: Duplicate Signatories
                     if ($source_id) {
-                        // Copy records from document_signatories where batch_id matches the source ID
                         $sql_signatories = $conn->prepare("
                             INSERT INTO document_signatories 
                                 (user_id, signing_order, office_assigned, station_assigned, office_id, station_id, batch_id, full_name)
@@ -300,21 +306,21 @@ if (isset($_GET['api'])) {
                         $message = 'Record and associated signatories duplicated successfully!';
                     }
                     
-                    $conn->commit(); // Commit transaction
+                    $conn->commit(); 
                     $conn->close();
                     echo json_encode(['success' => true, 'message' => $message]);
 
                 } catch (Exception $e) {
-                    if ($conn) $conn->rollback(); // Rollback on failure
+                    if ($conn) $conn->rollback(); 
                     if ($conn) $conn->close();
                     http_response_code(500); 
                     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
                     exit;
                 }
-                break; // End of case 'save_record'
+                break; 
 
             case 'delete_record':
-                $conn = get_local_db_connection(); // Delete from local table
+                $conn = get_local_db_connection(); 
                 $id = isset($input['id']) ? intval($input['id']) : null;
                 if (!$id) throw new Exception("No ID provided");
                 $sql = "DELETE FROM office_station WHERE id=$id";
@@ -366,7 +372,7 @@ if (isset($_GET['api'])) {
                 Local Office & Station Records
             </h1>
             <button id="add-new-btn" class="mt-4 sm:mt-0 px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
-                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record (From International)
+                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record
             </button>
         </header>
         
@@ -381,6 +387,14 @@ if (isset($_GET['api'])) {
                 <label for="filter-station" class="block text-sm font-medium text-gray-700 mb-1">Filter by Station</label>
                 <select id="filter-station" disabled class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 bg-gray-50 cursor-not-allowed">
                     <option value="">All Stations</option>
+                </select>
+            </div>
+            <div class="flex-1">
+                <label for="filter-status" class="block text-sm font-medium text-gray-700 mb-1">Filter by Status</label>
+                <select id="filter-status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500">
+                    <option value="">All Statuses</option>
+                    <option value="Online">Online (Active)</option>
+                    <option value="Offline">Offline (End Service)</option>
                 </select>
             </div>
         </div>
@@ -403,12 +417,12 @@ if (isset($_GET['api'])) {
     <div id="crud-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden flex items-center justify-center p-4 z-50 transition-opacity duration-300 ease-out">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 transform scale-95 transition-transform duration-300">
             <div class="flex justify-between items-center border-b pb-4 mb-4">
-                <h3 id="modal-title" class="text-2xl font-bold text-gray-800">Add New Record (To Local DB)</h3>
+                <h3 id="modal-title" class="text-2xl font-bold text-gray-800">Add New Record</h3>
                 <button onclick="closeModal('crud-modal')" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
             </div>
             <form id="record-form">
                 <input type="hidden" id="record-id">
-                <p class="text-sm text-gray-600 mb-4">Select an Office-Station pair from the International Database to save a copy to your Local Database.</p>
+                <p class="text-sm text-gray-600 mb-4">Select an Office-Station pair from the International Database.</p>
                 <div class="space-y-4">
                     <div>
                         <label for="office" class="block text-sm font-medium text-gray-700 mb-1">Office Name (International)</label>
@@ -422,7 +436,20 @@ if (isset($_GET['api'])) {
                             <option value="" disabled selected>Select an Office first</option>
                         </select>
                     </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="service_start" class="block text-sm font-medium text-gray-700 mb-1">Service Start Date</label>
+                            <input type="date" id="service_start" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="service_end" class="block text-sm font-medium text-gray-700 mb-1">Service End Date</label>
+                            <input type="date" id="service_end" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">If set, status becomes "Offline"</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="mt-6 flex justify-end space-x-3">
                     <button type="button" onclick="closeModal('crud-modal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 flex items-center">
@@ -444,7 +471,7 @@ if (isset($_GET['api'])) {
             <div class="text-sm text-gray-600 mb-4">List of individuals assigned to sign documents for this Office-Station pair (Local ID: <span id="current-batch-id" class="font-semibold"></span>).</div>
             
             <div id="signatories-list-container" class="max-h-96 overflow-y-auto">
-                </div>
+            </div>
 
             <div class="mt-6 flex justify-end">
                 <button type="button" onclick="closeModal('signatories-modal')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Close</button>
@@ -473,10 +500,10 @@ if (isset($_GET['api'])) {
 
     <script>
         // --- GLOBAL DATA ---
-        let internationalMasterData = []; // Holds all Office-Station pairs from the INT DB
-        let localRecords = []; // Holds all records from the LOCAL DB
-        let currentActionRecord = null; // Stores record object for delete/duplicate operations
-        let recordToDeleteId = null; // Stays for compatibility with delete flow
+        let internationalMasterData = []; 
+        let localRecords = []; 
+        let currentActionRecord = null; 
+        let recordToDeleteId = null; 
 
         const showToast = (message, type = 'info') => {
             const container = document.getElementById('toast-container');
@@ -494,14 +521,12 @@ if (isset($_GET['api'])) {
 
         const apiCall = async (action, method = 'GET', data = null, id = null) => {
             let url = `?api=${action}`;
-            // Use the ID in the URL only for GET requests where it's a query parameter
             if (id !== null && method === 'GET') url += `&id=${id}`; 
             
             const options = { method: method };
             if (data) options.body = JSON.stringify(data);
             
             const response = await fetch(url, options);
-            
             if (!response.ok) {
                 const errorBody = await response.json().catch(() => ({ message: response.statusText }));
                 console.error("API Call Failed Response:", errorBody);
@@ -510,12 +535,11 @@ if (isset($_GET['api'])) {
             return await response.json();
         };
 
-        // --- INTERNATIONAL DROPDOWN LOGIC (For Modal) ---
-
+        // --- INTERNATIONAL DROPDOWN LOGIC ---
         const loadInternationalDropdownData = async () => {
             try {
-                internationalMasterData = await apiCall('get_dropdowns'); // returns [{office: 'A', station: '1'}, ...]
-                populateOfficeDropdown(); // Populates the modal's office dropdown
+                internationalMasterData = await apiCall('get_dropdowns');
+                populateOfficeDropdown();
             } catch (error) {
                 console.error(error);
                 showToast('Failed to load international configuration data', 'error');
@@ -564,7 +588,6 @@ if (isset($_GET['api'])) {
         };
 
         // --- LOCAL CRUD OPERATIONS & DISPLAY ---
-
         const fetchLocalRecords = async () => {
             document.getElementById('loading-state').classList.remove('hidden');
             try {
@@ -573,19 +596,16 @@ if (isset($_GET['api'])) {
                 
                 if (records.success === false) throw new Error(records.message);
                 
-                localRecords = records; // Store full list
+                localRecords = records; 
                 
                 if (localRecords.length === 0) {
                     document.getElementById('empty-state').classList.remove('hidden');
                     document.getElementById('data-card-container').innerHTML = '';
                 } else {
                     document.getElementById('empty-state').classList.add('hidden');
-                    // Get filter values from URL on initial load
                     const urlParams = new URLSearchParams(window.location.search);
                     const initialOfficeFilter = urlParams.get('office_filter') || '';
                     const initialStationFilter = urlParams.get('station_filter') || '';
-                    
-                    // Pass initial filter values to populate dropdowns
                     populateFilterDropdowns(initialOfficeFilter, initialStationFilter); 
                 }
             } catch (error) {
@@ -594,62 +614,51 @@ if (isset($_GET['api'])) {
             }
         };
 
-        /**
-         * NEW FUNCTION: Executes the duplication API call with the option to include signatories.
-         */
         const executeDuplication = async (record, withSignatories) => {
             const dataToSave = { 
                 office: record.office, 
                 station: record.station,
-                // Pass source_id ONLY if signatories are requested
+                service_start: record.service_start, // Copy existing dates
+                service_end: record.service_end,
                 source_id: withSignatories ? record.id : null 
             };
             
-            closeModal('confirm-modal'); // Close the confirmation modal
-            
+            closeModal('confirm-modal');
             try {
                 const res = await apiCall('save_record', 'POST', dataToSave);
                 if (res.success) {
                     showToast(res.message, 'success');
-                    await fetchLocalRecords(); // Refresh the local list
+                    await fetchLocalRecords(); 
                 } else throw new Error(res.message);
             } catch (error) {
                 showToast(`Duplication failed: ${error.message}`, 'error');
             }
         };
 
-        /**
-         * MODIFIED FUNCTION: Opens a confirmation modal for duplication choices.
-         */
         window.duplicateRecord = (record) => {
-            currentActionRecord = record; // Store the record globally for the modal buttons
-            
+            currentActionRecord = record; 
             const modal = document.getElementById('confirm-modal');
             document.getElementById('confirm-modal-title').innerHTML = '<i data-lucide="copy-check" class="w-6 h-6 mr-2 text-green-600"></i> Confirm Duplication';
             document.getElementById('confirm-modal-body').innerHTML = `
                 You are duplicating **${record.office} / ${record.station} (ID: ${record.id})**. <br><br>
                 Do you want to copy the **assigned signatories** to the new record?
             `;
-
             const buttonsContainer = document.getElementById('confirm-action-buttons');
             buttonsContainer.innerHTML = `
                 <button type="button" onclick="executeDuplication(currentActionRecord, false)" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100">Duplicate <b>Without</b> Signatories</button>
                 <button type="button" onclick="executeDuplication(currentActionRecord, true)" class="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Duplicate <b>With</b> Signatories</button>
             `;
-            
             lucide.createIcons();
             openModal('confirm-modal');
         };
 
         const saveRecord = async (data) => {
-            // This function is for saving a NEW record from the modal, 
-            // which does not pass source_id, thus no duplication occurs.
             try {
                 const res = await apiCall('save_record', 'POST', data);
                 if (res.success) {
                     showToast(res.message, 'success');
                     closeModal('crud-modal');
-                    await fetchLocalRecords(); // Refresh the local list
+                    await fetchLocalRecords(); 
                 } else throw new Error(res.message);
             } catch (error) {
                 showToast(error.message, 'error');
@@ -662,7 +671,7 @@ if (isset($_GET['api'])) {
                 const res = await apiCall('delete_record', 'POST', { id: recordToDeleteId });
                 if (res.success) {
                     showToast(res.message, 'success');
-                    closeModal('confirm-modal'); // Updated to use confirm-modal
+                    closeModal('confirm-modal');
                     await fetchLocalRecords();
                 } else throw new Error(res.message);
             } catch (error) {
@@ -671,30 +680,20 @@ if (isset($_GET['api'])) {
         };
         
         // --- FILTER & CARD DISPLAY LOGIC ---
-
         const updateURLFilters = (office, station) => {
             const url = new URL(window.location);
-            if (office) {
-                url.searchParams.set('office_filter', office);
-            } else {
-                url.searchParams.delete('office_filter');
-            }
-            if (station) {
-                url.searchParams.set('station_filter', station);
-            } else {
-                url.searchParams.delete('station_filter');
-            }
+            if (office) url.searchParams.set('office_filter', office);
+            else url.searchParams.delete('office_filter');
+            if (station) url.searchParams.set('station_filter', station);
+            else url.searchParams.delete('station_filter');
             window.history.pushState({}, '', url); 
         };
 
         const populateFilterDropdowns = (selectedOffice = '', selectedStation = '') => {
             const officeFilter = document.getElementById('filter-office');
-            
-            // Clear and add 'All' option
             officeFilter.innerHTML = '<option value="">All Offices</option>';
             document.getElementById('filter-station').innerHTML = '<option value="">All Stations</option>';
 
-            // Populate unique offices from local data
             const uniqueOffices = [...new Set(localRecords.map(item => item.office))];
             uniqueOffices.forEach(office => {
                 const option = document.createElement('option');
@@ -703,8 +702,6 @@ if (isset($_GET['api'])) {
                 if (office === selectedOffice) option.selected = true; 
                 officeFilter.appendChild(option);
             });
-            
-            // Reset/Update Station filter based on the (possibly pre-selected) office filter
             updateStationFilter(selectedStation);
         };
         
@@ -719,14 +716,11 @@ if (isset($_GET['api'])) {
             let uniqueStations = [];
 
             if (!officeFilter) {
-                 // If no office is selected, show all unique stations from all local records
                 uniqueStations = [...new Set(localRecords.map(item => item.station))];
             } else {
-                // If an office is selected, filter stations by that office
                 const stationsForSelectedOffice = localRecords
                     .filter(record => record.office === officeFilter)
                     .map(record => record.station);
-                    
                 uniqueStations = [...new Set(stationsForSelectedOffice)];
             }
             
@@ -741,7 +735,6 @@ if (isset($_GET['api'])) {
             stationFilter.disabled = false;
             stationFilter.classList.remove('bg-gray-50', 'cursor-not-allowed');
             
-            // Update URL and render cards after filter change
             updateURLFilters(officeFilter, stationFilter.value);
             renderCards(); 
         };
@@ -749,15 +742,24 @@ if (isset($_GET['api'])) {
         const renderCards = () => {
             const officeFilterValue = document.getElementById('filter-office').value;
             const stationFilterValue = document.getElementById('filter-station').value;
-            const container = document.getElementById('data-card-container');
+            const statusFilterValue = document.getElementById('filter-status').value;
             
-            // Update URL based on current selections
+            const container = document.getElementById('data-card-container');
             updateURLFilters(officeFilterValue, stationFilterValue);
 
             const filteredRecords = localRecords.filter(record => {
                 const officeMatch = !officeFilterValue || record.office === officeFilterValue;
                 const stationMatch = !stationFilterValue || record.station === stationFilterValue;
-                return officeMatch && stationMatch;
+                
+                // Logic: Offline if service_end is set (not null/empty). Online otherwise.
+                const isOffline = record.service_end && record.service_end.trim() !== "";
+                const isOnline = !isOffline;
+
+                let statusMatch = true;
+                if (statusFilterValue === 'Online') statusMatch = isOnline;
+                if (statusFilterValue === 'Offline') statusMatch = isOffline;
+
+                return officeMatch && stationMatch && statusMatch;
             });
 
             if (filteredRecords.length === 0 && localRecords.length > 0) {
@@ -768,55 +770,76 @@ if (isset($_GET['api'])) {
                  return;
             }
 
+            container.innerHTML = filteredRecords.map(r => {
+                // Determine display status
+                const isOffline = r.service_end && r.service_end.trim() !== "";
+                const statusBadge = isOffline 
+                    ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200"><div class="w-2 h-2 rounded-full bg-gray-400 mr-1.5"></div>Offline (Ended)</span>`
+                    : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><div class="w-2 h-2 rounded-full bg-green-500 mr-1.5"></div>Online</span>`;
+                
+                // Date formatting
+                const startDisplay = r.service_start ? r.service_start : '<span class="text-gray-400 italic">Not set</span>';
+                const endDisplay = r.service_end ? r.service_end : '<span class="text-gray-400 italic">Ongoing</span>';
 
-            container.innerHTML = filteredRecords.map(r => `
-                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg transition-shadow">
-                    <div class="flex justify-between items-start">
-                        <h4 class="text-xl font-bold text-gray-800 mb-2">${r.office}</h4>
+                // JSON safe string for duplication
+                // We escape single quotes for the inline onclick handler
+                const safeOffice = r.office.replace(/'/g, "\\'");
+                const safeStation = r.station.replace(/'/g, "\\'");
+                const safeStart = r.service_start || '';
+                const safeEnd = r.service_end || '';
+
+                return `
+                <div class="bg-white rounded-xl shadow-md p-6 border-l-4 ${isOffline ? 'border-gray-400' : 'border-blue-500'} hover:shadow-lg transition-shadow relative overflow-hidden">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex flex-col">
+                           ${statusBadge}
+                        </div>
                         <div class="flex space-x-1">
-                            
                             <a href="#" onclick="navigateToSignatory(event, ${r.id})" class="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition-colors" title="Assign Signatory">
                                 <i data-lucide="square-pen" class="w-5 h-5"></i>
                             </a>
-                            
                             <button onclick="openSignatoriesModal(${r.id})" class="text-purple-600 hover:text-purple-900 p-1 rounded-full hover:bg-purple-50 transition-colors" title="View Signatories">
                                 <i data-lucide="users" class="w-5 h-5"></i>
                             </button>
-
-                            <button onclick="duplicateRecord({id: ${r.id}, office: '${r.office}', station: '${r.station}'})" class="text-green-600 hover:text-green-900 p-1 rounded-full hover:bg-green-50 transition-colors" title="Duplicate Record">
+                            <button onclick="duplicateRecord({id: ${r.id}, office: '${safeOffice}', station: '${safeStation}', service_start: '${safeStart}', service_end: '${safeEnd}'})" class="text-green-600 hover:text-green-900 p-1 rounded-full hover:bg-green-50 transition-colors" title="Duplicate Record">
                                 <i data-lucide="copy-check" class="w-5 h-5"></i>
                             </button>
-
                             <button onclick="openDeleteModal(${r.id})" class="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50 transition-colors" title="Delete Local Record">
                                 <i data-lucide="trash-2" class="w-5 h-5"></i>
                             </button>
                         </div>
                     </div>
-                    <p class="text-sm font-semibold text-blue-600 uppercase">Station:</p>
+                    <h4 class="text-xl font-bold text-gray-800 leading-tight">${r.office}</h4>
+                    <p class="text-sm font-semibold text-blue-600 uppercase mt-2">Station:</p>
                     <p class="text-lg text-gray-700 font-medium">${r.station}</p>
-                    <p class="text-xs text-gray-400 mt-2">Local ID: ${r.id}</p>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <p class="text-gray-500 text-xs">Service Start</p>
+                            <p class="font-medium text-gray-700">${startDisplay}</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500 text-xs">Service End</p>
+                            <p class="font-medium text-gray-700">${endDisplay}</p>
+                        </div>
+                    </div>
+                    <div class="absolute bottom-2 right-4 text-[10px] text-gray-300">ID: ${r.id}</div>
                 </div>
-            `).join('');
+            `}).join('');
             lucide.createIcons();
         };
 
-        // --- SIGNATORIES MODAL LOGIC (FIXED: Table View with Dynamic Empty State) ---
-
+        // --- SIGNATORIES MODAL LOGIC ---
         const renderSignatories = (signatories) => {
             const container = document.getElementById('signatories-list-container');
-            
-            // Clear previous content completely
             container.innerHTML = '';
 
-            // If no data, inject the empty state message directly
             if (signatories.length === 0) {
                 container.innerHTML = '<p class="text-center p-8 text-gray-500">No signatories found for this batch ID.</p>';
                 return;
             }
 
             const totalSignatories = signatories.length;
-
-            // Create Table Structure
             let tableHtml = `
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
@@ -831,11 +854,9 @@ if (isset($_GET['api'])) {
                         <tbody class="bg-white divide-y divide-gray-200">
             `;
 
-            // Loop through signatories to create rows
             tableHtml += signatories.map((s, index) => {
                 const docId = s.doc_id;
                 const order = s.signing_order;
-                
                 const moveUpDisabled = order === 1;
                 const moveDownDisabled = order === totalSignatories;
 
@@ -879,12 +900,7 @@ if (isset($_GET['api'])) {
                 `;
             }).join('');
 
-            tableHtml += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
+            tableHtml += `</tbody></table></div>`;
             container.innerHTML = tableHtml;
             lucide.createIcons();
         };
@@ -896,57 +912,45 @@ if (isset($_GET['api'])) {
             document.querySelector('#signatories-modal > div').classList.replace('scale-95', 'scale-100');
             
             try {
-                // Fetch signatories using the local office_station ID as batch_id
                 const result = await apiCall('get_signatories', 'GET', null, batchId);
-                if (result.success) {
-                    renderSignatories(result.signatories);
-                } else {
-                    throw new Error(result.message);
-                }
+                if (result.success) renderSignatories(result.signatories);
+                else throw new Error(result.message);
             } catch (error) {
-                renderSignatories([]); // Clear list on error
+                renderSignatories([]); 
                 showToast(`Failed to load signatories: ${error.message}`, 'error');
             }
         };
         
         window.moveSignatory = async (docId, currentOrder, newOrder) => {
             if (currentOrder === newOrder) return;
-            
             const batchId = document.getElementById('current-batch-id').textContent;
-            
             try {
                 const res = await apiCall('move_signatory', 'POST', {
                     doc_id: docId,
                     current_order: currentOrder,
                     new_order: newOrder
                 });
-                
                 if (res.success) {
                     showToast(res.message, 'success');
-                    // Refresh the signatories list in the modal
                     await openSignatoriesModal(parseInt(batchId));
-                } else {
-                    throw new Error(res.message);
-                }
+                } else throw new Error(res.message);
             } catch (error) {
                 showToast(`Move failed: ${error.message}`, 'error');
             }
         };
         
         window.editSignatory = (docId, order) => {
-            showToast(`Action: Edit Doc ID ${docId} at Order ${order}. (New modal/form needed!)`, 'info');
+            showToast(`Action: Edit Doc ID ${docId} at Order ${order}.`, 'info');
         };
 
         window.initiateSignatoryDelete = (docId) => {
             const modal = document.getElementById('confirm-modal');
             document.getElementById('confirm-modal-title').innerHTML = '<i data-lucide="trash-2" class="w-6 h-6 mr-2 text-red-600"></i> Delete Signatory';
             document.getElementById('confirm-modal-body').innerHTML = 'Are you sure you want to remove this signatory? <br>This will adjust the order of subsequent signatories.';
-            
             const buttonsContainer = document.getElementById('confirm-action-buttons');
             buttonsContainer.innerHTML = `
                 <button type="button" onclick="confirmSignatoryDelete(${docId})" class="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Yes, Delete</button>
             `;
-            
             lucide.createIcons();
             openModal('confirm-modal');
         };
@@ -957,7 +961,6 @@ if (isset($_GET['api'])) {
                 if (res.success) {
                     showToast(res.message, 'success');
                     closeModal('confirm-modal');
-                    // Refresh list
                     const batchId = document.getElementById('current-batch-id').textContent;
                     if(batchId) await openSignatoriesModal(parseInt(batchId));
                 } else throw new Error(res.message);
@@ -967,17 +970,10 @@ if (isset($_GET['api'])) {
         }
 
         // --- UI HANDLERS ---
-        
-        /**
-         * NEW: Handles navigation with a loading overlay
-         */
         window.navigateToSignatory = (event, id) => {
-            event.preventDefault(); // Stop the default link click immediately
-            
+            event.preventDefault(); 
             const overlay = document.getElementById('global-loading-overlay');
-            overlay.classList.remove('hidden'); // Show the loading screen
-            
-            // Small timeout to ensure the browser paints the overlay before freezing for navigation
+            overlay.classList.remove('hidden'); 
             setTimeout(() => {
                 window.location.href = `signat_path.php?id=${id}`;
             }, 100); 
@@ -988,9 +984,9 @@ if (isset($_GET['api'])) {
             const form = document.getElementById('record-form');
             if (id === 'crud-modal') {
                 form.reset();
-                document.getElementById('modal-title').textContent = 'Add New Record (To Local DB)';
-                populateOfficeDropdown(); // Reset to empty
-                filterStations(); // Reset to empty/disabled
+                document.getElementById('modal-title').textContent = 'Add New Record';
+                populateOfficeDropdown(); 
+                filterStations(); 
             }
             modal.classList.remove('hidden');
             document.querySelector(`#${id} > div`).classList.replace('scale-95', 'scale-100');
@@ -1002,15 +998,11 @@ if (isset($_GET['api'])) {
             setTimeout(() => modal.classList.add('hidden'), 300);
         };
         
-        /**
-         * MODIFIED FUNCTION: Opens the generic confirm modal for deletion.
-         */
         window.openDeleteModal = (id) => {
             recordToDeleteId = id;
             const modal = document.getElementById('confirm-modal');
             document.getElementById('confirm-modal-title').innerHTML = '<i data-lucide="alert-triangle" class="w-6 h-6 mr-2 text-red-600"></i> Confirm Deletion';
             document.getElementById('confirm-modal-body').innerHTML = 'Are you sure you want to **delete** this **Local** record?';
-            
             const buttonsContainer = document.getElementById('confirm-action-buttons');
             buttonsContainer.innerHTML = `
                 <button type="button" id="confirm-delete-btn" class="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Delete Permanently</button>
@@ -1021,39 +1013,29 @@ if (isset($_GET['api'])) {
         };
         
         // --- INITIALIZATION ---
-
         window.onload = async () => {
-            // Load international data for the selection modal
             await loadInternationalDropdownData();
-            // Load local records for the main display and filters. This now handles
-            // reading filter state from the URL and calls updateStationFilter/renderCards.
             await fetchLocalRecords(); 
             
-            // Event Listener: Modal Office Change -> Filter Stations
-            document.getElementById('office').addEventListener('change', () => {
-                filterStations(); 
-            });
-
-            // Event Listener: Filter Office Change -> Update Station Filter AND Render Cards
-            document.getElementById('filter-office').addEventListener('change', () => updateStationFilter('')); // Reset station filter when office changes
-            
-            // Event Listener: Filter Station Change -> Render Cards
+            document.getElementById('office').addEventListener('change', () => filterStations());
+            document.getElementById('filter-office').addEventListener('change', () => updateStationFilter('')); 
             document.getElementById('filter-station').addEventListener('change', renderCards);
+            
+            // NEW LISTENER: Status Filter
+            document.getElementById('filter-status').addEventListener('change', renderCards);
 
             document.getElementById('add-new-btn').addEventListener('click', () => openModal('crud-modal'));
             
-            // Handle form submission (Saving a copy to local DB)
             document.getElementById('record-form').addEventListener('submit', (e) => {
                 e.preventDefault();
-                // When saving from the modal, we don't pass source_id, so no duplication occurs.
                 saveRecord({
                     office: document.getElementById('office').value,
-                    station: document.getElementById('station').value
+                    station: document.getElementById('station').value,
+                    service_start: document.getElementById('service_start').value,
+                    service_end: document.getElementById('service_end').value
                 });
             });
 
-            // The confirm-delete-btn handler is now dynamically assigned inside openDeleteModal
-            // document.getElementById('confirm-delete-btn').addEventListener('click', deleteRecord);
             lucide.createIcons();
         };
     </script>
