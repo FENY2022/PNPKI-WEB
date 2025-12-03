@@ -326,7 +326,7 @@ if (isset($_GET['api'])) {
                 Local Office & Station Records
             </h1>
             <button id="add-new-btn" class="mt-4 sm:mt-0 px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
-                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record (From International)
+                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record
             </button>
         </header>
         
