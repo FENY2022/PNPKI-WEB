@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 03, 2025 at 07:58 AM
+-- Generation Time: Dec 03, 2025 at 09:30 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -102,7 +102,15 @@ INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `offic
 (60, 1648, 1, 'REGIONAL OFFICE', 'RO ED', '2025-12-03 06:55:15', NULL, NULL, 35, 'Leonila L. Rosales'),
 (61, 1653, 2, 'REGIONAL OFFICE', 'RO LD', '2025-12-03 06:55:15', NULL, NULL, 35, 'Redemtor A. Oja'),
 (62, 1649, 1, 'REGIONAL OFFICE', 'RO FD', '2025-12-03 06:57:23', NULL, NULL, 36, 'Ana Baena Pedalizo'),
-(63, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-12-03 06:57:23', NULL, NULL, 36, 'Claudio A. Nistal, Jr.');
+(63, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-12-03 06:57:23', NULL, NULL, 36, 'Claudio A. Nistal, Jr.'),
+(64, 1653, 1, 'REGIONAL OFFICE', 'RO LD', '2025-12-03 07:00:21', NULL, NULL, 37, 'Redemtor A. Oja'),
+(65, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-12-03 07:00:21', NULL, NULL, 37, 'Claudio A. Nistal, Jr.'),
+(68, 756, 1, 'REGIONAL OFFICE', 'RO NGP', '2025-12-03 07:02:01', NULL, NULL, 40, 'Luis P. Gonzaga'),
+(69, 1643, 2, 'REGIONAL OFFICE', 'RO TS', '2025-12-03 07:02:01', NULL, NULL, 40, 'REDEMTOR A. OJA	'),
+(70, 781, 1, 'REGIONAL OFFICE', 'RO SMD', '2025-12-03 07:17:07', NULL, NULL, 42, 'Juliet B. Ilogon'),
+(71, 1643, 2, 'REGIONAL OFFICE', 'RO TS', '2025-12-03 07:17:07', NULL, NULL, 42, 'REDEMTOR A. OJA	'),
+(73, 1650, 1, 'REGIONAL OFFICE', 'RO LPDD', '2025-12-03 07:18:19', NULL, NULL, 38, 'Mila G. Garcia'),
+(74, 1653, 2, 'REGIONAL OFFICE', 'RO LD', '2025-12-03 07:18:19', NULL, NULL, 38, 'Redemtor A. Oja');
 
 -- --------------------------------------------------------
 
@@ -113,26 +121,28 @@ INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `offic
 CREATE TABLE `office_station` (
   `id` int(11) NOT NULL,
   `office` varchar(255) NOT NULL,
-  `station` varchar(255) NOT NULL
+  `station` varchar(255) NOT NULL,
+  `service_start` date DEFAULT NULL,
+  `service_end` date DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `office_station`
 --
 
-INSERT INTO `office_station` (`id`, `office`, `station`) VALUES
-(31, 'REGIONAL OFFICE', 'RO PMD'),
-(32, 'REGIONAL OFFICE', 'RO ASD'),
-(34, 'REGIONAL OFFICE', 'RO CDD'),
-(35, 'REGIONAL OFFICE', 'RO ED'),
-(36, 'REGIONAL OFFICE', 'RO FD'),
-(37, 'REGIONAL OFFICE', 'RO LD'),
-(38, 'REGIONAL OFFICE', 'RO LPDD'),
-(39, 'REGIONAL OFFICE', 'RO MS'),
-(40, 'REGIONAL OFFICE', 'RO NGP'),
-(41, 'REGIONAL OFFICE', 'RO ORED'),
-(42, 'REGIONAL OFFICE', 'RO SMD'),
-(43, 'REGIONAL OFFICE', 'RO TS');
+INSERT INTO `office_station` (`id`, `office`, `station`, `service_start`, `service_end`) VALUES
+(31, 'REGIONAL OFFICE', 'RO PMD', NULL, NULL),
+(32, 'REGIONAL OFFICE', 'RO ASD', NULL, NULL),
+(34, 'REGIONAL OFFICE', 'RO CDD', NULL, NULL),
+(35, 'REGIONAL OFFICE', 'RO ED', NULL, NULL),
+(36, 'REGIONAL OFFICE', 'RO FD', NULL, NULL),
+(37, 'REGIONAL OFFICE', 'RO LD', NULL, NULL),
+(38, 'REGIONAL OFFICE', 'RO LPDD', NULL, NULL),
+(39, 'REGIONAL OFFICE', 'RO MS', NULL, NULL),
+(40, 'REGIONAL OFFICE', 'RO NGP', NULL, NULL),
+(41, 'REGIONAL OFFICE', 'RO ORED', NULL, NULL),
+(42, 'REGIONAL OFFICE', 'RO SMD', NULL, NULL),
+(43, 'REGIONAL OFFICE', 'RO TS', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -245,7 +255,7 @@ ALTER TABLE `document_files`
 -- AUTO_INCREMENT for table `document_signatories`
 --
 ALTER TABLE `document_signatories`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=75;
 
 --
 -- AUTO_INCREMENT for table `office_station`
