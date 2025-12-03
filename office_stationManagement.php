@@ -209,7 +209,47 @@ if (isset($_GET['api'])) {
                     exit;
                 }
                 break;
+            
+            // API: Delete Signatory (Removes row and reorders subsequent items)
+            case 'delete_signatory':
+                $doc_id = isset($input['doc_id']) ? intval($input['doc_id']) : null;
+                if (!$doc_id) throw new Exception("No Doc ID provided");
 
+                $conn = get_local_db_connection();
+                $conn->begin_transaction();
+
+                try {
+                    // 1. Get info before delete to handle reordering
+                    $sql_info = $conn->prepare("SELECT batch_id, signing_order FROM document_signatories WHERE doc_id = ?");
+                    $sql_info->bind_param("i", $doc_id);
+                    $sql_info->execute();
+                    $res_info = $sql_info->get_result();
+                    $row = $res_info->fetch_assoc();
+                    
+                    if (!$row) throw new Exception("Signatory not found");
+                    
+                    $batch_id = $row['batch_id'];
+                    $deleted_order = $row['signing_order'];
+
+                    // 2. Delete the record
+                    $sql_del = $conn->prepare("DELETE FROM document_signatories WHERE doc_id = ?");
+                    $sql_del->bind_param("i", $doc_id);
+                    if (!$sql_del->execute()) throw new Exception("Delete failed: " . $conn->error);
+
+                    // 3. Reorder remaining signatories (Shift everyone below the deleted one UP by 1)
+                    $sql_reorder = $conn->prepare("UPDATE document_signatories SET signing_order = signing_order - 1 WHERE batch_id = ? AND signing_order > ?");
+                    $sql_reorder->bind_param("ii", $batch_id, $deleted_order);
+                    if (!$sql_reorder->execute()) throw new Exception("Reordering failed: " . $conn->error);
+
+                    $conn->commit();
+                    $conn->close();
+                    echo json_encode(['success' => true, 'message' => 'Signatory deleted and list reordered.']);
+                } catch (Exception $e) {
+                    if ($conn) $conn->rollback();
+                    error_log('Signatory delete error: ' . $e->getMessage());
+                    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+                }
+                break;
 
             // API: Save Record - Now saves to the LOCAL table 'office_station' with conditional duplication of signatories
             case 'save_record':
@@ -326,7 +366,7 @@ if (isset($_GET['api'])) {
                 Local Office & Station Records
             </h1>
             <button id="add-new-btn" class="mt-4 sm:mt-0 px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors flex items-center">
-                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record
+                <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add New Record (From International)
             </button>
         </header>
         
@@ -603,7 +643,7 @@ if (isset($_GET['api'])) {
 
         const saveRecord = async (data) => {
             // This function is for saving a NEW record from the modal, 
-            // which does not pass source_id, thus no signatory duplication occurs.
+            // which does not pass source_id, thus no duplication occurs.
             try {
                 const res = await apiCall('save_record', 'POST', data);
                 if (res.success) {
@@ -828,6 +868,11 @@ if (isset($_GET['api'])) {
                                     title="Edit Signatory">
                                     <i data-lucide="pencil" class="w-5 h-5"></i>
                                 </button>
+                                <button onclick="initiateSignatoryDelete(${docId})" 
+                                    class="p-1.5 rounded-full text-red-600 hover:bg-red-100 transition-colors" 
+                                    title="Delete Signatory">
+                                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -892,6 +937,34 @@ if (isset($_GET['api'])) {
             showToast(`Action: Edit Doc ID ${docId} at Order ${order}. (New modal/form needed!)`, 'info');
         };
 
+        window.initiateSignatoryDelete = (docId) => {
+            const modal = document.getElementById('confirm-modal');
+            document.getElementById('confirm-modal-title').innerHTML = '<i data-lucide="trash-2" class="w-6 h-6 mr-2 text-red-600"></i> Delete Signatory';
+            document.getElementById('confirm-modal-body').innerHTML = 'Are you sure you want to remove this signatory? <br>This will adjust the order of subsequent signatories.';
+            
+            const buttonsContainer = document.getElementById('confirm-action-buttons');
+            buttonsContainer.innerHTML = `
+                <button type="button" onclick="confirmSignatoryDelete(${docId})" class="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Yes, Delete</button>
+            `;
+            
+            lucide.createIcons();
+            openModal('confirm-modal');
+        };
+
+        window.confirmSignatoryDelete = async (docId) => {
+             try {
+                const res = await apiCall('delete_signatory', 'POST', { doc_id: docId });
+                if (res.success) {
+                    showToast(res.message, 'success');
+                    closeModal('confirm-modal');
+                    // Refresh list
+                    const batchId = document.getElementById('current-batch-id').textContent;
+                    if(batchId) await openSignatoriesModal(parseInt(batchId));
+                } else throw new Error(res.message);
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
 
         // --- UI HANDLERS ---
         
