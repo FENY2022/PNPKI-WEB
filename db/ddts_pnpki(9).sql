@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 20, 2025 at 10:23 AM
+-- Generation Time: Dec 03, 2025 at 07:58 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -93,9 +93,16 @@ CREATE TABLE `document_signatories` (
 --
 
 INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `office_assigned`, `station_assigned`, `assigned_at`, `office_id`, `station_id`, `batch_id`, `full_name`) VALUES
-(49, 58, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-20 08:59:41', NULL, NULL, 32, 'MARIETTA L. CHUA'),
 (50, 56, 1, 'REGIONAL OFFICE', 'RO PMD', '2025-11-20 09:05:14', NULL, NULL, 31, 'MARY KATHLEEN P. PO'),
-(51, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-11-20 09:05:14', NULL, NULL, 31, 'Claudio A. Nistal, Jr.');
+(51, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-11-20 09:05:14', NULL, NULL, 31, 'Claudio A. Nistal, Jr.'),
+(56, 1359, 1, 'REGIONAL OFFICE', 'RO ASD', '2025-12-03 06:53:25', NULL, NULL, 32, 'Elsalyn J. Evangelio'),
+(57, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-12-03 06:53:25', NULL, NULL, 32, 'Claudio A. Nistal, Jr.'),
+(58, 1650, 1, 'REGIONAL OFFICE', 'RO LPDD', '2025-12-03 06:54:28', NULL, NULL, 34, 'Mila G. Garcia'),
+(59, 1643, 2, 'REGIONAL OFFICE', 'RO TS', '2025-12-03 06:54:28', NULL, NULL, 34, 'REDEMTOR A. OJA	'),
+(60, 1648, 1, 'REGIONAL OFFICE', 'RO ED', '2025-12-03 06:55:15', NULL, NULL, 35, 'Leonila L. Rosales'),
+(61, 1653, 2, 'REGIONAL OFFICE', 'RO LD', '2025-12-03 06:55:15', NULL, NULL, 35, 'Redemtor A. Oja'),
+(62, 1649, 1, 'REGIONAL OFFICE', 'RO FD', '2025-12-03 06:57:23', NULL, NULL, 36, 'Ana Baena Pedalizo'),
+(63, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-12-03 06:57:23', NULL, NULL, 36, 'Claudio A. Nistal, Jr.');
 
 -- --------------------------------------------------------
 
@@ -115,7 +122,17 @@ CREATE TABLE `office_station` (
 
 INSERT INTO `office_station` (`id`, `office`, `station`) VALUES
 (31, 'REGIONAL OFFICE', 'RO PMD'),
-(32, 'REGIONAL OFFICE', 'RO ASD');
+(32, 'REGIONAL OFFICE', 'RO ASD'),
+(34, 'REGIONAL OFFICE', 'RO CDD'),
+(35, 'REGIONAL OFFICE', 'RO ED'),
+(36, 'REGIONAL OFFICE', 'RO FD'),
+(37, 'REGIONAL OFFICE', 'RO LD'),
+(38, 'REGIONAL OFFICE', 'RO LPDD'),
+(39, 'REGIONAL OFFICE', 'RO MS'),
+(40, 'REGIONAL OFFICE', 'RO NGP'),
+(41, 'REGIONAL OFFICE', 'RO ORED'),
+(42, 'REGIONAL OFFICE', 'RO SMD'),
+(43, 'REGIONAL OFFICE', 'RO TS');
 
 -- --------------------------------------------------------
 
@@ -152,7 +169,8 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`, `profile_picture_path`) VALUES
-(3, 'venzonanthonie@gmail.com', '$2y$10$d86o9GS8gWa5ikqzqeW4.u2hHldY5wFQtTMQSAvRnhpIhPV936twK', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, 'uploads/profile_pics/3_d8a0add5e7a4.png');
+(3, 'venzonanthonie@gmail.com', '$2y$10$hTFUtGd1n7FYcP6U9f6TQuBr4w9tEEvrl7maJLOPIbQXgdakvRyaG', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, 'uploads/profile_pics/3_d8a0add5e7a4.png'),
+(4, 'eugue20@gmail.com', '$2y$10$XL1J4pagugRRdpCCpe6A3.l4YBIJ4v9ymOBxeCDAEnWCEVW.nTmgO', 'EUGREG', 'E', 'BAPTISMA', '', 'FOREST RANGER', 'NETWORK ADMINISTRATOR', 'PLANNING MANAGEMENT', 'Male', '09923806672', 'Initiator', 'active', NULL, NULL, NULL, NULL, '2025-12-02 04:01:39', 0, 'uploads/profile_pics/4_aa01de759b8a.png');
 
 --
 -- Indexes for dumped tables
@@ -227,19 +245,19 @@ ALTER TABLE `document_files`
 -- AUTO_INCREMENT for table `document_signatories`
 --
 ALTER TABLE `document_signatories`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=52;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64;
 
 --
 -- AUTO_INCREMENT for table `office_station`
 --
 ALTER TABLE `office_station`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=44;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- Constraints for dumped tables
