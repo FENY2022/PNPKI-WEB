@@ -10,13 +10,9 @@ declare(strict_types=1);
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-// --- LOCAL DATABASE CONFIG (from db.php) ---
-define('LOCAL_DB_HOST', 'localhost');
-define('LOCAL_DB_NAME', 'ddts_pnpki');     // Your database name
-define('LOCAL_DB_USER', 'root');    // Your database user
-define('LOCAL_DB_PASS', ''); // Your database password
+require_once 'db.php';
 
-// --- INTERNATIONAL DATABASE CONFIG (from db_international.php) ---
+// --- INTERNATIONAL DATABASE CONFIG ---
 define('INTL_DB_HOST', '153.92.15.60');
 define('INTL_DB_USER', 'u645536029_otos_root');
 define('INTL_DB_PASS', '6yI3PF3OZ');
@@ -26,6 +22,7 @@ define('DB_CHARSET', 'utf8mb4');
 
 /**
  * Returns a connected mysqli instance for the LOCAL database.
+ * Uses constants defined in db.php (LOCAL_DB_HOST, etc.)
  */
 function get_local_db_connection(): mysqli
 {

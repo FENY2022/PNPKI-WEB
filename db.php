@@ -9,8 +9,22 @@
 // NOTE: Replace these placeholder values with your actual database credentials.
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'ddts_pnpki');     // Your database name
-define('DB_USER', 'root');    // Your database user
-define('DB_PASS', ''); // Your database password
+define('DB_USER', 'root');           // Your database user
+define('DB_PASS', '');               // Your database password
+
+// --- 1.1 Map Standard Config to LOCAL Config ---
+// This fixes the 500 Error in office_stationManagement.php
+define('LOCAL_DB_HOST', DB_HOST);
+define('LOCAL_DB_NAME', DB_NAME);
+define('LOCAL_DB_USER', DB_USER);
+define('LOCAL_DB_PASS', DB_PASS);
+
+// Optional: Write DB config if used elsewhere
+define('WRITE_DB_HOST', 'localhost');
+define('WRITE_DB_USER', 'root');
+define('WRITE_DB_PASS', '');
+define('WRITE_DB_NAME', 'ddts_pnpki');
+
 
 // --- 2. Connection Initialization ---
 $conn = null; // Initialize the connection variable
@@ -20,7 +34,6 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
     // Create the MySQLi connection instance
-    // $conn now holds the database connection object
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
     // Set charset to UTF-8 for proper handling of special characters
@@ -32,16 +45,10 @@ try {
     
 } catch (\mysqli_sql_exception $e) {
     // --- 3. Error Handling ---
-    // If the connection fails, stop execution and log/display the error.
-    
-    // Log the error message (recommended for production environments)
     error_log("Database Connection Error (MySQLi): " . $e->getMessage(), 0); 
-    
-    // Display a user-friendly error message (avoid showing $e->getMessage() in production)
     http_response_code(500);
     die("<h1>System Error</h1><p>Could not establish a connection to the database. Please contact system support.</p>");
 } catch (\Exception $e) {
-    // Handle other setup errors (like charset setting)
     error_log("General Database Setup Error: " . $e->getMessage(), 0); 
     http_response_code(500);
     die("<h1>System Error</h1><p>A configuration error occurred during setup. Please contact support.</p>");
