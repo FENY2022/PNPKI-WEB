@@ -1,6 +1,7 @@
 <?php
 session_start();
-require_once 'db.php';
+require_once 'db.php';            // Local Database Connection
+require_once 'db_international.php'; // External OTOS Database Connection
 
 // --- 1. Security & Access Control ---
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'Admin') {
@@ -25,6 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $sex = $_POST['sex'];
+        // Capture OTOS Link ID
+        $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
         // Basic validation
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -42,8 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Insert User
                 $pass_hash = password_hash($password, PASSWORD_DEFAULT);
                 $status = 'active';
-                $otos_link = 0; // Default
 
+                // UPDATED QUERY: Included otos_userlink in INSERT
                 $stmt = $conn->prepare("INSERT INTO users (email, password_hash, first_name, last_name, role, division, position, sex, status, otos_userlink) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("sssssssssi", $email, $pass_hash, $fname, $lname, $role, $division, $position, $sex, $status, $otos_link);
 
@@ -66,9 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $position = trim($_POST['position']);
         $fname = trim($_POST['first_name']);
         $lname = trim($_POST['last_name']);
+        // Capture OTOS Link ID
+        $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
-        $stmt = $conn->prepare("UPDATE users SET first_name=?, last_name=?, role=?, status=?, division=?, position=? WHERE user_id=?");
-        $stmt->bind_param("ssssssi", $fname, $lname, $role, $status, $division, $position, $user_id);
+        // UPDATED QUERY: Included otos_userlink in UPDATE
+        $stmt = $conn->prepare("UPDATE users SET first_name=?, last_name=?, role=?, status=?, division=?, position=?, otos_userlink=? WHERE user_id=?");
+        $stmt->bind_param("ssssssii", $fname, $lname, $role, $status, $division, $position, $otos_link, $user_id);
 
         if ($stmt->execute()) {
             $success_msg = "User details updated.";
@@ -99,7 +105,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// --- 3. Fetch Users (Search & Pagination) ---
+// --- 3. Fetch OTOS Employees (External DB) ---
+$otos_employees = [];
+try {
+    $conn_otos = get_db_connection(); // From db_international.php
+    if ($conn_otos) {
+        // NOTE: Please ensure 'id', 'firstname', 'lastname' match the columns in your 'useremployee' table
+        $sql_otos = "SELECT id, firstname, lastname FROM useremployee ORDER BY lastname ASC";
+        $result_otos = $conn_otos->query($sql_otos);
+        
+        if ($result_otos) {
+            while ($row = $result_otos->fetch_assoc()) {
+                $otos_employees[] = $row;
+            }
+        }
+        $conn_otos->close();
+    }
+} catch (Exception $e) {
+    // If OTOS DB fails, we log it but don't stop the local page from loading
+    error_log("OTOS DB Connection failed in manageuser.php: " . $e->getMessage());
+}
+
+// --- 4. Fetch Users (Search & Pagination) ---
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 10;
@@ -322,7 +349,7 @@ function getInitials($fname, $lname) {
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="grid grid-cols-2 gap-4 mb-4">
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">Division</label>
                         <input type="text" name="division" class="w-full border rounded-lg px-3 py-2 text-sm">
@@ -332,6 +359,19 @@ function getInitials($fname, $lname) {
                         <input type="text" name="position" class="w-full border rounded-lg px-3 py-2 text-sm">
                     </div>
                 </div>
+                
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
+                    <select name="otos_userlink" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="0">-- No Link --</option>
+                        <?php foreach ($otos_employees as $emp): ?>
+                            <option value="<?php echo htmlspecialchars($emp['id']); ?>">
+                                <?php echo htmlspecialchars($emp['lastname'] . ', ' . $emp['firstname']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <div class="flex justify-end gap-2">
                     <button type="button" onclick="closeAddModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
                     <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Create User</button>
@@ -391,7 +431,7 @@ function getInitials($fname, $lname) {
                         </select>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-700 mb-1">Division</label>
                             <input type="text" name="division" id="edit_division" class="w-full border rounded-lg px-3 py-2 text-sm">
@@ -400,6 +440,18 @@ function getInitials($fname, $lname) {
                             <label class="block text-xs font-bold text-gray-700 mb-1">Position</label>
                             <input type="text" name="position" id="edit_position" class="w-full border rounded-lg px-3 py-2 text-sm">
                         </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
+                        <select name="otos_userlink" id="edit_otos_userlink" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                            <option value="0">-- No Link --</option>
+                            <?php foreach ($otos_employees as $emp): ?>
+                                <option value="<?php echo htmlspecialchars($emp['id']); ?>">
+                                    <?php echo htmlspecialchars($emp['lastname'] . ', ' . $emp['firstname']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="flex justify-end gap-2">
@@ -461,6 +513,13 @@ function getInitials($fname, $lname) {
             document.getElementById('edit_status').value = user.status;
             document.getElementById('edit_division').value = user.division || '';
             document.getElementById('edit_position').value = user.position || '';
+
+            // Update OTOS Link Select
+            // If the user has a link, set it, otherwise default to 0
+            const otosLinkSelect = document.getElementById('edit_otos_userlink');
+            if (otosLinkSelect) {
+                otosLinkSelect.value = user.otos_userlink || 0;
+            }
 
             // Reset tab view
             switchTab('details');

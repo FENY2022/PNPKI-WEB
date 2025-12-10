@@ -27,13 +27,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $privacy_policy = isset($_POST['privacy_policy']); 
 
     // --- 2. Server-Side Validation ---
+    // ALLOW ANY EMAIL: We only check if it is a valid email format.
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "A valid email address is required.";
     }
-    // Check if email must be a 'gmail.com' address
-    if (substr($email, -10) !== "@gmail.com") {
-        $errors[] = "Registration is currently limited to @gmail.com addresses only.";
-    }
+    
     if (empty($password) || strlen($password) < 8) {
         $errors[] = "Password must be at least 8 characters long.";
     }
@@ -76,9 +74,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Set token expiry (e.g., 1 hour from now)
             $token_expiry = date('Y-m-d H:i:s', time() + 3600); 
 
-            // Insert into database with 'pending' status
+            // Insert into database with 'Pending' status
             $sql = "INSERT INTO users (email, password_hash, first_name, middle_name, last_name, suffix, position, designation, division, sex, contact_number, status, verification_token, token_expiry) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)";
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)";
             
             $stmt = $conn->prepare($sql);
             $stmt->bind_param(
@@ -335,7 +333,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="max-w-4xl w-full bg-white p-8 sm:p-10 rounded-xl shadow-lg">
             <h1 class="text-3xl font-bold text-center text-gray-900 mb-6">Create Your Account</h1>
             <p class="text-center text-gray-600 mb-8">
-                Fill in the details below to register. Registration is limited to <span class="font-semibold text-blue-600">@gmail.com</span> addresses.
+                Fill in the details below to register.
             </p>
 
             <?php if (!empty($errors)): ?>
@@ -500,7 +498,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <legend class="text-lg font-semibold text-gray-700 px-2">Account & Contact</legend>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                 <div>
-                                    <label for="email" class="block text-sm font-medium text-gray-700">Email Address (must be @gmail.com) <span class="text-red-500">*</span></label>
+                                    <label for="email" class="block text-sm font-medium text-gray-700">Email Address <span class="text-red-500">*</span></label>
                                     <input type="email" id="email" name="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
                                 </div>
                                 <div>
