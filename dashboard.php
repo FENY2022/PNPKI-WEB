@@ -16,81 +16,77 @@ $email = $_SESSION['email'];
 $otos_userlink = $_SESSION['otos_userlink'];
 
 
-// --- 3. DB Connection (using MySQLi) ---
-// Note: This uses the fallback credentials defined in the original file.
-// If your project uses config.php or db.php, ensure those files provide a $conn MySQLi instance.
+// --- 3. DB Connection (Local / ddts_pnpki) ---
+// This connection is used for fetching the profile picture and other local data.
 $conn = null;
 if (file_exists(__DIR__ . '/config.php')) {
-    // Assuming config.php/db.php provides a $conn MySQLi instance.
     require_once __DIR__ . '/config.php';
 } elseif (file_exists(__DIR__ . '/db.php')) {
     require_once __DIR__ . '/db.php';
 } else {
-    // fallback MySQLi connection (local defaults)
+    // Fallback MySQLi connection
     $dbHost = '127.0.0.1';
     $dbName = 'ddts_pnpki';
     $dbUser = 'root';
     $dbPass = '';
     
-    // Establishing connection
     $conn = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
     
-    // Check connection
     if ($conn->connect_error) {
-        // Fail gracefully for the image fetch if connection fails
         $conn = null; 
     }
 }
 
-// --- 3.5 Fetch Signatory_Station (ADDED LOGIC) ---
-$signatory_station = ""; // Initialize variable
+// --- 3.5 Fetch Signatory_Station (FIXED LOGIC) ---
+// We use the external connection (db_international.php) for this specific query.
+$signatory_station = ""; 
 
-// [FIX APPLIED] The block below is commented out to prevent the fatal error.
-// The table 'useremployee' does not exist in the database yet.
-/* if ($conn && isset($otos_userlink)) {
-    // Prepare the SQL statement to filter by id
-    $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
+if (isset($otos_userlink) && file_exists(__DIR__ . '/db_international.php')) {
     
-    if ($stmt_sig = $conn->prepare($sql_sig)) {
-        // Bind the parameter (assuming otos_userlink matches the id type, usually integer)
-        $stmt_sig->bind_param("i", $otos_userlink);
+    // 1. Include the external DB configuration
+    require_once __DIR__ . '/db_international.php';
+    
+    // 2. Get the connection to the OTOS database
+    // Note: This function handles its own error logging/connection failures.
+    $otos_conn = get_db_connection();
+
+    if ($otos_conn instanceof mysqli) {
+        // 3. Query the 'useremployee' table in the remote DB
+        $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
         
-        // Execute the query
-        $stmt_sig->execute();
+        if ($stmt_sig = $otos_conn->prepare($sql_sig)) {
+            $stmt_sig->bind_param("i", $otos_userlink);
+            $stmt_sig->execute();
+            $stmt_sig->bind_result($signatory_station);
+            $stmt_sig->fetch();
+            $stmt_sig->close();
+            
+            // Echo the result as originally requested
+            echo $signatory_station; 
+        }
         
-        // Bind the result
-        $stmt_sig->bind_result($signatory_station);
-        
-        // Fetch the value
-        $stmt_sig->fetch();
-        
-        // Close this specific statement so we can reuse $conn later
-        $stmt_sig->close();
-        
-        // Echo the result as requested
-        echo $signatory_station; 
+        // Close the external connection
+        $otos_conn->close();
     }
 }
-*/
 
-// --- 4. Fetch Profile Picture (Using MySQLi) ---
+
+// --- 4. Fetch Profile Picture (Using Local DB) ---
 $profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
 
-// If not in session and connection is successful, fetch it.
 if ($conn && $user_id && $profile_picture_path === null) {
     
-    // Prepare statement to prevent SQL injection
     $stmt = $conn->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
     
     if ($stmt) {
-        $stmt->bind_param("i", $user_id); // 'i' for integer
+        $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $result = $stmt->get_result();
         
         if ($result->num_rows > 0) {
             $row = $result->fetch_assoc();
             $profile_picture_path = $row['profile_picture_path'];
-            $_SESSION['profile_picture_path'] = $profile_picture_path; // Store in session
+            $_SESSION['profile_picture_path'] = $profile_picture_path;
         }
         
         $stmt->close();
@@ -109,9 +105,8 @@ function initials($name) {
 }
 $initials = initials($full_name);
 
-// Close connection if it was successfully opened
+// Close local connection
 if ($conn instanceof mysqli && !empty($conn->thread_id)) {
-    // Only close if the connection was established and we are not expecting it to be used later in the script (which we aren't, as content loads via iframe)
     $conn->close();
 }
 ?>
@@ -123,7 +118,7 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Dashboard - DDTMS DENR CARAGA</title>
-    <link rel="icon" type="image/png" href="logo/icon.png">
+    <link rel="icon" type="image/png" href="logo/ddtms.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
