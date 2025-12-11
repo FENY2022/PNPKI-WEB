@@ -1,11 +1,10 @@
 <?php
 session_start();
-require_once 'db.php';            // Local Database Connection
+require_once 'db.php';               // Local Database Connection
 require_once 'db_international.php'; // External OTOS Database Connection
 
 // --- 1. Security & Access Control ---
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'Admin') {
-    // If accessed directly by non-admin, redirect to dashboard or login
     header("Location: dashboard_home.php");
     exit;
 }
@@ -26,27 +25,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $sex = $_POST['sex'];
-        // Capture OTOS Link ID
         $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
-        // Basic validation
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $error_msg = "Invalid email format.";
         } elseif (strlen($password) < 8) {
             $error_msg = "Password must be at least 8 characters.";
         } else {
-            // Check if email exists
             $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
             $stmt->bind_param("s", $email);
             $stmt->execute();
             if ($stmt->get_result()->num_rows > 0) {
                 $error_msg = "Email already exists.";
             } else {
-                // Insert User
                 $pass_hash = password_hash($password, PASSWORD_DEFAULT);
                 $status = 'active';
-
-                // UPDATED QUERY: Included otos_userlink in INSERT
                 $stmt = $conn->prepare("INSERT INTO users (email, password_hash, first_name, last_name, role, division, position, sex, status, otos_userlink) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("sssssssssi", $email, $pass_hash, $fname, $lname, $role, $division, $position, $sex, $status, $otos_link);
 
@@ -69,10 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $position = trim($_POST['position']);
         $fname = trim($_POST['first_name']);
         $lname = trim($_POST['last_name']);
-        // Capture OTOS Link ID
         $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
-        // UPDATED QUERY: Included otos_userlink in UPDATE
         $stmt = $conn->prepare("UPDATE users SET first_name=?, last_name=?, role=?, status=?, division=?, position=?, otos_userlink=? WHERE user_id=?");
         $stmt->bind_param("ssssssii", $fname, $lname, $role, $status, $division, $position, $otos_link, $user_id);
 
@@ -105,13 +96,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// --- 3. Fetch OTOS Employees (External DB) ---
+// --- 3. Fetch OTOS Employees (With Console Error Reporting) ---
 $otos_employees = [];
+$otos_error_console = null; // Variable to hold error for JS console
+
 try {
-    $conn_otos = get_db_connection(); // From db_international.php
+    $conn_otos = get_db_connection(); 
     if ($conn_otos) {
-        // NOTE: Please ensure 'id', 'firstname', 'lastname' match the columns in your 'useremployee' table
-        $sql_otos = "SELECT id, firstname, lastname FROM useremployee ORDER BY lastname ASC";
+        // Attempt to select. If column names are wrong, this will throw Exception.
+        $sql_otos = "SELECT id, first_name, last_name FROM useremployee ORDER BY last_name ASC";
         $result_otos = $conn_otos->query($sql_otos);
         
         if ($result_otos) {
@@ -122,8 +115,9 @@ try {
         $conn_otos->close();
     }
 } catch (Exception $e) {
-    // If OTOS DB fails, we log it but don't stop the local page from loading
-    error_log("OTOS DB Connection failed in manageuser.php: " . $e->getMessage());
+    // Catch the error and save it to print to console later
+    $otos_error_console = "OTOS DB Error: " . $e->getMessage();
+    error_log($otos_error_console); // Still log to server log
 }
 
 // --- 4. Fetch Users (Search & Pagination) ---
@@ -143,7 +137,6 @@ if ($search) {
     $types = "ssss";
 }
 
-// Get Total Count
 $count_sql = "SELECT COUNT(*) as total FROM users $where_sql";
 $stmt = $conn->prepare($count_sql);
 if ($search) $stmt->bind_param($types, ...$params);
@@ -152,12 +145,10 @@ $total_rows = $stmt->get_result()->fetch_assoc()['total'];
 $total_pages = ceil($total_rows / $limit);
 $stmt->close();
 
-// Get Data
 $sql = "SELECT * FROM users $where_sql ORDER BY created_at DESC LIMIT ? OFFSET ?";
 $params[] = $limit;
 $params[] = $offset;
 $types .= "ii";
-
 $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$params);
 $stmt->execute();
@@ -168,7 +159,6 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-// Helper for Initials
 function getInitials($fname, $lname) {
     return strtoupper(substr($fname, 0, 1) . substr($lname, 0, 1));
 }
@@ -190,6 +180,15 @@ function getInitials($fname, $lname) {
     </style>
 </head>
 <body class="text-gray-800 p-4 md:p-8">
+
+    <?php if ($otos_error_console): ?>
+    <script>
+        console.group("❌ Backend Error Detected");
+        console.error(<?php echo json_encode($otos_error_console); ?>);
+        console.log("Tip: Check if column names 'first_name' and 'last_name' exist in the 'useremployee' table.");
+        console.groupEnd();
+    </script>
+    <?php endif; ?>
 
     <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
         <div>
@@ -359,14 +358,19 @@ function getInitials($fname, $lname) {
                         <input type="text" name="position" class="w-full border rounded-lg px-3 py-2 text-sm">
                     </div>
                 </div>
-                
+
                 <div class="mb-6">
                     <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
-                    <select name="otos_userlink" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                    
+                    <input type="text" id="otos_search_add" placeholder="Type to search name..." 
+                           onkeyup="filterOptions('otos_search_add', 'otos_select_add')"
+                           class="w-full border border-gray-300 rounded-t-lg px-3 py-1 text-xs bg-gray-50 focus:outline-none mb-1">
+                    
+                    <select name="otos_userlink" id="otos_select_add" class="w-full border rounded-b-lg px-3 py-2 text-sm bg-white">
                         <option value="0">-- No Link --</option>
                         <?php foreach ($otos_employees as $emp): ?>
                             <option value="<?php echo htmlspecialchars($emp['id']); ?>">
-                                <?php echo htmlspecialchars($emp['lastname'] . ', ' . $emp['firstname']); ?>
+                                <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -444,11 +448,16 @@ function getInitials($fname, $lname) {
 
                     <div class="mb-6">
                         <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
-                        <select name="otos_userlink" id="edit_otos_userlink" class="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                        
+                        <input type="text" id="otos_search_edit" placeholder="Type to search name..." 
+                               onkeyup="filterOptions('otos_search_edit', 'edit_otos_userlink')"
+                               class="w-full border border-gray-300 rounded-t-lg px-3 py-1 text-xs bg-gray-50 focus:outline-none mb-1">
+                        
+                        <select name="otos_userlink" id="edit_otos_userlink" class="w-full border rounded-b-lg px-3 py-2 text-sm bg-white">
                             <option value="0">-- No Link --</option>
                             <?php foreach ($otos_employees as $emp): ?>
                                 <option value="<?php echo htmlspecialchars($emp['id']); ?>">
-                                    <?php echo htmlspecialchars($emp['lastname'] . ', ' . $emp['firstname']); ?>
+                                    <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -515,16 +524,19 @@ function getInitials($fname, $lname) {
             document.getElementById('edit_position').value = user.position || '';
 
             // Update OTOS Link Select
-            // If the user has a link, set it, otherwise default to 0
             const otosLinkSelect = document.getElementById('edit_otos_userlink');
             if (otosLinkSelect) {
                 otosLinkSelect.value = user.otos_userlink || 0;
             }
+            
+            const searchInput = document.getElementById('otos_search_edit');
+            if (searchInput) {
+                searchInput.value = '';
+                filterOptions('otos_search_edit', 'edit_otos_userlink'); 
+            }
 
-            // Reset tab view
             switchTab('details');
 
-            // Show modal
             editModal.classList.remove('opacity-0', 'pointer-events-none');
             editContent.classList.remove('scale-95');
             editContent.classList.add('scale-100');
@@ -562,8 +574,28 @@ function getInitials($fname, $lname) {
                 formDetails.classList.add('hidden');
             }
         }
+
+        function filterOptions(inputId, selectId) {
+            var input = document.getElementById(inputId);
+            var filter = input.value.toUpperCase();
+            var select = document.getElementById(selectId);
+            var options = select.getElementsByTagName("option");
+
+            for (var i = 0; i < options.length; i++) {
+                var txtValue = options[i].textContent || options[i].innerText;
+                if (i === 0) {
+                    options[i].style.display = "";
+                    continue; 
+                }
+                
+                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                    options[i].style.display = "";
+                } else {
+                    options[i].style.display = "none";
+                }
+            }
+        }
         
-        // Close on Escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === "Escape") {
                 closeAddModal();
