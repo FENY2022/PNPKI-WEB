@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $sex = $_POST['sex'];
+        // CHANGED: Now getting ID from hidden input
         $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -98,13 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- 3. Fetch OTOS Employees (With Console Error Reporting) ---
 $otos_employees = [];
-$otos_error_console = null; // Variable to hold error for JS console
+$otos_error_console = null; 
 
 try {
     $conn_otos = get_db_connection(); 
     if ($conn_otos) {
-        // Attempt to select. If column names are wrong, this will throw Exception.
-        $sql_otos = "SELECT id, first_name, last_name FROM useremployee ORDER BY last_name ASC";
+        $sql_otos = "SELECT id, first_name, last_name, Full_Name FROM useremployee ORDER BY last_name ASC";
         $result_otos = $conn_otos->query($sql_otos);
         
         if ($result_otos) {
@@ -115,9 +115,8 @@ try {
         $conn_otos->close();
     }
 } catch (Exception $e) {
-    // Catch the error and save it to print to console later
     $otos_error_console = "OTOS DB Error: " . $e->getMessage();
-    error_log($otos_error_console); // Still log to server log
+    error_log($otos_error_console);
 }
 
 // --- 4. Fetch Users (Search & Pagination) ---
@@ -131,10 +130,10 @@ $params = [];
 $types = "";
 
 if ($search) {
-    $where_sql .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR division LIKE ?)";
+    $where_sql .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR division LIKE ? OR Full_Name LIKE ?)";
     $s_term = "%$search%";
     $params = [$s_term, $s_term, $s_term, $s_term];
-    $types = "ssss";
+    $types = "sssss";
 }
 
 $count_sql = "SELECT COUNT(*) as total FROM users $where_sql";
@@ -185,7 +184,6 @@ function getInitials($fname, $lname) {
     <script>
         console.group("❌ Backend Error Detected");
         console.error(<?php echo json_encode($otos_error_console); ?>);
-        console.log("Tip: Check if column names 'first_name' and 'last_name' exist in the 'useremployee' table.");
         console.groupEnd();
     </script>
     <?php endif; ?>
@@ -300,7 +298,7 @@ function getInitials($fname, $lname) {
         <?php endif; ?>
     </div>
 
-    <div id="addModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+    <div id="addModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
         <div class="absolute inset-0 bg-gray-900 opacity-50" onclick="closeAddModal()"></div>
         <div class="bg-white w-full max-w-lg mx-4 rounded-xl shadow-2xl z-50 overflow-hidden transform transition-all scale-95" id="addModalContent">
             <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
@@ -309,6 +307,7 @@ function getInitials($fname, $lname) {
             </div>
             <form action="" method="POST" class="p-6">
                 <input type="hidden" name="action" value="add_user">
+                
                 <div class="grid grid-cols-2 gap-4 mb-4">
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">First Name</label>
@@ -361,19 +360,19 @@ function getInitials($fname, $lname) {
 
                 <div class="mb-6">
                     <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
-                    
-                    <input type="text" id="otos_search_add" placeholder="Type to search name..." 
-                           onkeyup="filterOptions('otos_search_add', 'otos_select_add')"
-                           class="w-full border border-gray-300 rounded-t-lg px-3 py-1 text-xs bg-gray-50 focus:outline-none mb-1">
-                    
-                    <select name="otos_userlink" id="otos_select_add" class="w-full border rounded-b-lg px-3 py-2 text-sm bg-white">
-                        <option value="0">-- No Link --</option>
-                        <?php foreach ($otos_employees as $emp): ?>
-                            <option value="<?php echo htmlspecialchars($emp['id']); ?>">
-                                <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <div class="flex gap-2">
+                        <input type="hidden" name="otos_userlink" id="add_otos_id" value="0">
+                        <input type="text" id="add_otos_name" readonly placeholder="No Employee Selected" 
+                               class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed">
+                        <button type="button" onclick="openOtosModal('add')" 
+                                class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 whitespace-nowrap">
+                             <i class="fas fa-search"></i> Select
+                        </button>
+                        <button type="button" onclick="clearOtosSelection('add')" 
+                                class="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-300">
+                             <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex justify-end gap-2">
@@ -384,7 +383,7 @@ function getInitials($fname, $lname) {
         </div>
     </div>
 
-    <div id="editModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+    <div id="editModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
         <div class="absolute inset-0 bg-gray-900 opacity-50" onclick="closeEditModal()"></div>
         <div class="bg-white w-full max-w-lg mx-4 rounded-xl shadow-2xl z-50 overflow-hidden transform transition-all scale-95" id="editModalContent">
             <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
@@ -448,19 +447,19 @@ function getInitials($fname, $lname) {
 
                     <div class="mb-6">
                         <label class="block text-xs font-bold text-gray-700 mb-1">Link OTOS Employee (Optional)</label>
-                        
-                        <input type="text" id="otos_search_edit" placeholder="Type to search name..." 
-                               onkeyup="filterOptions('otos_search_edit', 'edit_otos_userlink')"
-                               class="w-full border border-gray-300 rounded-t-lg px-3 py-1 text-xs bg-gray-50 focus:outline-none mb-1">
-                        
-                        <select name="otos_userlink" id="edit_otos_userlink" class="w-full border rounded-b-lg px-3 py-2 text-sm bg-white">
-                            <option value="0">-- No Link --</option>
-                            <?php foreach ($otos_employees as $emp): ?>
-                                <option value="<?php echo htmlspecialchars($emp['id']); ?>">
-                                    <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="flex gap-2">
+                            <input type="hidden" name="otos_userlink" id="edit_otos_id" value="0">
+                            <input type="text" id="edit_otos_name" readonly placeholder="No Employee Selected" 
+                                   class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed">
+                            <button type="button" onclick="openOtosModal('edit')" 
+                                    class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 whitespace-nowrap">
+                                <i class="fas fa-search"></i> Select
+                            </button>
+                            <button type="button" onclick="clearOtosSelection('edit')" 
+                                    class="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-300">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="flex justify-end gap-2">
@@ -491,18 +490,80 @@ function getInitials($fname, $lname) {
         </div>
     </div>
 
+    <div id="otosModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black opacity-60" onclick="closeOtosModal()"></div>
+        <div class="bg-white w-full max-w-2xl mx-4 rounded-xl shadow-2xl z-50 overflow-hidden transform transition-all scale-95 flex flex-col max-h-[80vh]" id="otosModalContent">
+            
+            <div class="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-indigo-900">Select OTOS Employee</h3>
+                <button onclick="closeOtosModal()" class="text-indigo-400 hover:text-indigo-700"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="p-4 bg-white border-b border-gray-100">
+                <input type="text" id="otosSearchInput" onkeyup="filterOtosTable()" 
+                       placeholder="Search name..." 
+                       class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+
+            <div class="overflow-y-auto p-0 flex-grow">
+                <table class="w-full text-left border-collapse" id="otosTable">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Employee Name</th>
+                            <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <?php foreach ($otos_employees as $emp): ?>
+                        <tr class="hover:bg-indigo-50 transition-colors">
+                            <td class="px-6 py-3 text-sm text-gray-800 font-medium">
+                                <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
+                            </td>
+                            <td class="px-6 py-3 text-right">
+                                <button type="button" 
+                                        onclick="selectOtosEmployee(<?php echo $emp['id']; ?>, '<?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name'], ENT_QUOTES); ?>')"
+                                        class="px-3 py-1 bg-white border border-indigo-600 text-indigo-600 rounded text-xs hover:bg-indigo-600 hover:text-white transition-colors">
+                                    Select
+                                </button>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (empty($otos_employees)): ?>
+                    <div class="p-8 text-center text-gray-500 text-sm">No OTOS employees found or database error.</div>
+                <?php endif; ?>
+            </div>
+            
+            <div class="p-4 bg-gray-50 border-t border-gray-100 text-right">
+                 <button type="button" onclick="closeOtosModal()" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Pass PHP Data to JS for lookup
+        const otosData = <?php echo json_encode($otos_employees); ?>;
+        
         // Modal Logic
         const addModal = document.getElementById('addModal');
         const editModal = document.getElementById('editModal');
+        const otosModal = document.getElementById('otosModal');
         const addContent = document.getElementById('addModalContent');
         const editContent = document.getElementById('editModalContent');
+        const otosContent = document.getElementById('otosModalContent');
+
+        // Track which modal opened the OTOS selection ('add' or 'edit')
+        let currentOtosMode = null; 
 
         function openAddModal() {
             addModal.classList.remove('opacity-0', 'pointer-events-none');
             addContent.classList.remove('scale-95');
             addContent.classList.add('scale-100');
             document.body.classList.add('modal-active');
+            
+            // Clear previous add form selections
+            clearOtosSelection('add'); 
         }
 
         function closeAddModal() {
@@ -523,16 +584,27 @@ function getInitials($fname, $lname) {
             document.getElementById('edit_division').value = user.division || '';
             document.getElementById('edit_position').value = user.position || '';
 
-            // Update OTOS Link Select
-            const otosLinkSelect = document.getElementById('edit_otos_userlink');
-            if (otosLinkSelect) {
-                otosLinkSelect.value = user.otos_userlink || 0;
-            }
+            // Handle OTOS Link Look up
+            const otosId = user.otos_userlink || 0;
+            const hiddenInput = document.getElementById('edit_otos_id');
+            const nameInput = document.getElementById('edit_otos_name');
             
-            const searchInput = document.getElementById('otos_search_edit');
-            if (searchInput) {
-                searchInput.value = '';
-                filterOptions('otos_search_edit', 'edit_otos_userlink'); 
+            hiddenInput.value = otosId;
+            
+            if (otosId > 0 && otosData.length > 0) {
+                // Find name in the data dump
+                const found = otosData.find(e => e.id == otosId);
+                if (found) {
+                    nameInput.value = found.last_name + ', ' + found.first_name;
+                    nameInput.classList.remove('text-gray-500');
+                    nameInput.classList.add('text-gray-900', 'font-medium');
+                } else {
+                    nameInput.value = "Unknown ID: " + otosId;
+                }
+            } else {
+                nameInput.value = "";
+                nameInput.classList.add('text-gray-500');
+                nameInput.classList.remove('text-gray-900', 'font-medium');
             }
 
             switchTab('details');
@@ -548,6 +620,75 @@ function getInitials($fname, $lname) {
             editContent.classList.add('scale-95');
             editContent.classList.remove('scale-100');
             document.body.classList.remove('modal-active');
+        }
+
+        // --- OTOS SELECTION LOGIC ---
+
+        function openOtosModal(mode) {
+            currentOtosMode = mode; // 'add' or 'edit'
+            
+            otosModal.classList.remove('opacity-0', 'pointer-events-none');
+            otosContent.classList.remove('scale-95');
+            otosContent.classList.add('scale-100');
+            
+            // Reset search
+            document.getElementById('otosSearchInput').value = '';
+            filterOtosTable();
+        }
+
+        function closeOtosModal() {
+            otosModal.classList.add('opacity-0', 'pointer-events-none');
+            otosContent.classList.add('scale-95');
+            otosContent.classList.remove('scale-100');
+            currentOtosMode = null;
+        }
+
+        function filterOtosTable() {
+            var input = document.getElementById("otosSearchInput");
+            var filter = input.value.toUpperCase();
+            var table = document.getElementById("otosTable");
+            var tr = table.getElementsByTagName("tr");
+
+            // Loop through all table rows, and hide those who don't match the search query
+            for (var i = 1; i < tr.length; i++) { // Start at 1 to skip header
+                var td = tr[i].getElementsByTagName("td")[0];
+                if (td) {
+                    var txtValue = td.textContent || td.innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }       
+            }
+        }
+
+        function selectOtosEmployee(id, name) {
+            if (!currentOtosMode) return;
+
+            const hiddenId = document.getElementById(currentOtosMode + '_otos_id');
+            const nameInput = document.getElementById(currentOtosMode + '_otos_name');
+
+            if (hiddenId && nameInput) {
+                hiddenId.value = id;
+                nameInput.value = name;
+                nameInput.classList.remove('text-gray-500');
+                nameInput.classList.add('text-gray-900', 'font-medium');
+            }
+
+            closeOtosModal();
+        }
+
+        function clearOtosSelection(mode) {
+            const hiddenId = document.getElementById(mode + '_otos_id');
+            const nameInput = document.getElementById(mode + '_otos_name');
+            
+            if (hiddenId && nameInput) {
+                hiddenId.value = 0;
+                nameInput.value = '';
+                nameInput.classList.add('text-gray-500');
+                nameInput.classList.remove('text-gray-900', 'font-medium');
+            }
         }
 
         function switchTab(tab) {
@@ -574,32 +715,16 @@ function getInitials($fname, $lname) {
                 formDetails.classList.add('hidden');
             }
         }
-
-        function filterOptions(inputId, selectId) {
-            var input = document.getElementById(inputId);
-            var filter = input.value.toUpperCase();
-            var select = document.getElementById(selectId);
-            var options = select.getElementsByTagName("option");
-
-            for (var i = 0; i < options.length; i++) {
-                var txtValue = options[i].textContent || options[i].innerText;
-                if (i === 0) {
-                    options[i].style.display = "";
-                    continue; 
-                }
-                
-                if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    options[i].style.display = "";
-                } else {
-                    options[i].style.display = "none";
-                }
-            }
-        }
         
         document.addEventListener('keydown', function(event) {
             if (event.key === "Escape") {
-                closeAddModal();
-                closeEditModal();
+                // Close top-most modal first
+                if (!otosModal.classList.contains('opacity-0')) {
+                    closeOtosModal();
+                } else {
+                    closeAddModal();
+                    closeEditModal();
+                }
             }
         });
     </script>
