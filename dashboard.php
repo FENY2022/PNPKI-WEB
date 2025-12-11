@@ -62,7 +62,7 @@ if (isset($otos_userlink) && file_exists(__DIR__ . '/db_international.php')) {
             $stmt_sig->close();
             
             // Echo the result as originally requested
-            echo $signatory_station; 
+             $signatory_station; 
         }
         
         // Close the external connection
