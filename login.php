@@ -28,7 +28,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($errors)) {
         try {
             // Prepare statement to find user by email
-            $sql = "SELECT user_id, email, password_hash, first_name, last_name, role, status 
+            $sql = "SELECT user_id, email, password_hash, first_name, last_name, role, status, otos_userlink
                     FROM users WHERE email = ?";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("s", $email);
@@ -52,6 +52,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['email'] = $user['email'];
                         $_SESSION['full_name'] = $user['first_name'] . ' ' . $user['last_name'];
                         $_SESSION['role'] = $user['role'];
+                        $_SESSION['otos_userlink'] = $user['otos_userlink'];
+
                         
                         // Redirect to the member-only area
                         header("Location: dashboard.php");

@@ -13,6 +13,9 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $email = $_SESSION['email'];
 
+$otos_userlink = $_SESSION['otos_userlink'];
+
+
 // --- 3. DB Connection (using MySQLi) ---
 // Note: This uses the fallback credentials defined in the original file.
 // If your project uses config.php or db.php, ensure those files provide a $conn MySQLi instance.
@@ -38,6 +41,37 @@ if (file_exists(__DIR__ . '/config.php')) {
         $conn = null; 
     }
 }
+
+// --- 3.5 Fetch Signatory_Station (ADDED LOGIC) ---
+$signatory_station = ""; // Initialize variable
+
+if ($conn && isset($otos_userlink)) {
+    // Prepare the SQL statement to filter by id
+    $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
+    
+    if ($stmt_sig = $conn->prepare($sql_sig)) {
+        // Bind the parameter (assuming otos_userlink matches the id type, usually integer)
+        $stmt_sig->bind_param("i", $otos_userlink);
+        
+        // Execute the query
+        $stmt_sig->execute();
+        
+        // Bind the result
+        $stmt_sig->bind_result($signatory_station);
+        
+        // Fetch the value
+        $stmt_sig->fetch();
+        
+        // Close this specific statement so we can reuse $conn later
+        $stmt_sig->close();
+        
+        // Echo the result as requested
+        // Note: Echoing here might appear at the very top of your HTML. 
+        // You might want to move this echo inside the HTML <body> if you want it visible on the page layout.
+        echo $signatory_station; 
+    }
+}
+
 
 // --- 4. Fetch Profile Picture (Using MySQLi) ---
 $profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
@@ -81,6 +115,8 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
     $conn->close();
 }
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
