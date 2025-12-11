@@ -58,7 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action']) && $_POST['action'] === 'update_user') {
         $user_id = (int)$_POST['user_id'];
         $role = $_POST['role'];
-        $status = $_POST['status'];
+        
+        // --- FIX: Check if status is set to prevent Undefined Array Key error ---
+        $status = isset($_POST['status']) ? $_POST['status'] : 'active';
+        
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $fname = trim($_POST['first_name']);
@@ -104,6 +107,7 @@ $otos_error_console = null;
 try {
     $conn_otos = get_db_connection(); 
     if ($conn_otos) {
+        // Fetch Full_Name explicitly
         $sql_otos = "SELECT id, first_name, last_name, Full_Name FROM useremployee ORDER BY last_name ASC";
         $result_otos = $conn_otos->query($sql_otos);
         
@@ -130,10 +134,12 @@ $params = [];
 $types = "";
 
 if ($search) {
-    $where_sql .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR division LIKE ? OR Full_Name LIKE ?)";
+    // Note: 'Full_Name' is not in 'users' table based on your SQL dump, 
+    // removed it from here to avoid SQL error on the main list search.
+    $where_sql .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR division LIKE ?)";
     $s_term = "%$search%";
     $params = [$s_term, $s_term, $s_term, $s_term];
-    $types = "sssss";
+    $types = "ssss";
 }
 
 $count_sql = "SELECT COUNT(*) as total FROM users $where_sql";
@@ -501,7 +507,7 @@ function getInitials($fname, $lname) {
 
             <div class="p-4 bg-white border-b border-gray-100">
                 <input type="text" id="otosSearchInput" onkeyup="filterOtosTable()" 
-                       placeholder="Search name..." 
+                       placeholder="Search Full Name..." 
                        class="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
 
@@ -517,11 +523,14 @@ function getInitials($fname, $lname) {
                         <?php foreach ($otos_employees as $emp): ?>
                         <tr class="hover:bg-indigo-50 transition-colors">
                             <td class="px-6 py-3 text-sm text-gray-800 font-medium">
-                                <?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name']); ?>
+                                <?php 
+                                // UPDATED: Display Full_Name specifically so the search filters on this field
+                                echo htmlspecialchars(!empty($emp['Full_Name']) ? $emp['Full_Name'] : $emp['last_name'] . ', ' . $emp['first_name']); 
+                                ?>
                             </td>
                             <td class="px-6 py-3 text-right">
                                 <button type="button" 
-                                        onclick="selectOtosEmployee(<?php echo $emp['id']; ?>, '<?php echo htmlspecialchars($emp['last_name'] . ', ' . $emp['first_name'], ENT_QUOTES); ?>')"
+                                        onclick="selectOtosEmployee(<?php echo $emp['id']; ?>, '<?php echo htmlspecialchars(!empty($emp['Full_Name']) ? $emp['Full_Name'] : $emp['last_name'] . ', ' . $emp['first_name'], ENT_QUOTES); ?>')"
                                         class="px-3 py-1 bg-white border border-indigo-600 text-indigo-600 rounded text-xs hover:bg-indigo-600 hover:text-white transition-colors">
                                     Select
                                 </button>
@@ -595,7 +604,8 @@ function getInitials($fname, $lname) {
                 // Find name in the data dump
                 const found = otosData.find(e => e.id == otosId);
                 if (found) {
-                    nameInput.value = found.last_name + ', ' + found.first_name;
+                    // Use Full_Name if available
+                    nameInput.value = found.Full_Name || (found.last_name + ', ' + found.first_name);
                     nameInput.classList.remove('text-gray-500');
                     nameInput.classList.add('text-gray-900', 'font-medium');
                 } else {
