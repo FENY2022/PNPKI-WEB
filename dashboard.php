@@ -45,7 +45,9 @@ if (file_exists(__DIR__ . '/config.php')) {
 // --- 3.5 Fetch Signatory_Station (ADDED LOGIC) ---
 $signatory_station = ""; // Initialize variable
 
-if ($conn && isset($otos_userlink)) {
+// [FIX APPLIED] The block below is commented out to prevent the fatal error.
+// The table 'useremployee' does not exist in the database yet.
+/* if ($conn && isset($otos_userlink)) {
     // Prepare the SQL statement to filter by id
     $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
     
@@ -66,12 +68,10 @@ if ($conn && isset($otos_userlink)) {
         $stmt_sig->close();
         
         // Echo the result as requested
-        // Note: Echoing here might appear at the very top of your HTML. 
-        // You might want to move this echo inside the HTML <body> if you want it visible on the page layout.
         echo $signatory_station; 
     }
 }
-
+*/
 
 // --- 4. Fetch Profile Picture (Using MySQLi) ---
 $profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
