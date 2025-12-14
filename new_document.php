@@ -302,6 +302,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
 
         <?php if (!empty($errors)): ?>
+            <script>
+                <?php foreach ($errors as $e): ?>
+                    console.error("Server-side Error:", <?php echo json_encode($e); ?>);
+                <?php endforeach; ?>
+            </script>
             <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg" role="alert">
                 <p class="font-bold">Errors Found:</p>
                 <ul class="list-disc list-inside ml-2">
@@ -575,6 +580,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             function showError(message) {
+                // NEW: Log client-side validation errors to console
+                if (message) {
+                    console.error("Client-side Validation Error:", message);
+                }
+
                 errorMsg.textContent = message;
                 message ? errorMsg.classList.remove('hidden') : errorMsg.classList.add('hidden');
             }
