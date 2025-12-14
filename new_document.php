@@ -482,7 +482,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // --- File Input Change Event ---
             fileInput.addEventListener('change', (e) => {
                 handleFiles(e.target.files);
-                e.target.value = ''; // Clear input to allow re-adding same file
+                // e.target.value = ''; // FIX: Commented out to prevent clearing files
             });
 
             function handleFiles(newFiles) {
@@ -589,7 +589,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 message ? errorMsg.classList.remove('hidden') : errorMsg.classList.add('hidden');
             }
 
-            // --- Form Submission Spinner & CRITICAL FILE FIX ---
+            // --- Form Submission Spinner & Fix ---
             const docForm = document.getElementById('new-doc-form');
             const submitButton = document.getElementById('submit-button');
             
@@ -597,7 +597,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 docForm.addEventListener('submit', function(e) {
                     
                     // [CRITICAL FIX] Re-populate the input with files from the DataTransfer object
-                    // This ensures PHP receives the files collected via drag-and-drop/multi-select
+                    // This is done right before submission to ensure files are included
                     fileInput.files = fileStore.files; 
 
                     const spinner = submitButton.querySelector('svg');
