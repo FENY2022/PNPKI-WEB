@@ -589,7 +589,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 message ? errorMsg.classList.remove('hidden') : errorMsg.classList.add('hidden');
             }
 
-            // --- Form Submission Spinner & Fix ---
+            // --- Form Submission Spinner & CRITICAL FILE FIX ---
             const docForm = document.getElementById('new-doc-form');
             const submitButton = document.getElementById('submit-button');
             
@@ -597,7 +597,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 docForm.addEventListener('submit', function(e) {
                     
                     // [CRITICAL FIX] Re-populate the input with files from the DataTransfer object
-                    // This is done right before submission to ensure files are included
+                    // This ensures PHP receives the files collected via drag-and-drop/multi-select
                     fileInput.files = fileStore.files; 
 
                     const spinner = submitButton.querySelector('svg');
