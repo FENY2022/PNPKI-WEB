@@ -369,7 +369,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <h2 class="text-xl font-semibold text-gray-900 border-b pb-3">2. Attach Files</h2>
                 
                 <div>
-                    <input type="file" id="document_files_input" name="document_files[]" multiple required 
+                    <input type="file" id="document_files_input" name="document_files[]" multiple 
                            class="hidden">
                            
                     <div id="drop-zone">
@@ -498,12 +498,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
                 
-                fileInput.files = fileStore.files;
+                // CRITICAL: Ensure the actual input has the files for immediate UI/prop checks
+                fileInput.files = fileStore.files; 
                 renderFileList();
             }
 
             function isDuplicate(newFile) {
                 for (let i = 0; i < fileStore.files.length; i++) {
+                    // Check by name AND size to avoid accidental mismatches
                     if (fileStore.files[i].name === newFile.name && fileStore.files[i].size === newFile.size) {
                         return true;
                     }
@@ -515,11 +517,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 fileListContainer.innerHTML = ''; // Clear visual list
                 
                 if (fileStore.files.length > 0) {
-                    fileInput.required = false; // No longer required if files are present
+                    fileInput.required = false; // Programmatically set required to false
                     addMoreLabel.classList.remove('hidden'); // Show "Add More"
                     dropZone.classList.add('hidden'); // Hide drop zone
                 } else {
-                    fileInput.required = true;
+                    fileInput.required = true; // Programmatically set required to true (only effective if HTML attribute is missing)
                     addMoreLabel.classList.add('hidden');
                     dropZone.classList.remove('hidden');
                 }
@@ -580,35 +582,45 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             function showError(message) {
-                // NEW: Log client-side validation errors to console
-                if (message) {
-                    console.error("Client-side Validation Error:", message);
-                }
-
                 errorMsg.textContent = message;
                 message ? errorMsg.classList.remove('hidden') : errorMsg.classList.add('hidden');
             }
 
-            // --- Form Submission Spinner ---
+            // --- Form Submission Spinner & Fix ---
             const docForm = document.getElementById('new-doc-form');
             const submitButton = document.getElementById('submit-button');
             
             if (docForm && submitButton) {
                 docForm.addEventListener('submit', function(e) {
+                    
+                    // [CRITICAL FIX] Re-populate the input with files from the DataTransfer object
+                    // This is done right before submission to ensure files are included
+                    fileInput.files = fileStore.files; 
+
+                    const spinner = submitButton.querySelector('svg');
+                    const buttonText = submitButton.querySelector('.button-text');
+
                     // Final check for files
-                    if (fileStore.files.length === 0) {
+                    if (fileInput.files.length === 0) {
                         e.preventDefault(); 
-                        showError('At least one document file is required.');
-                        // Trigger an error toast as well
-                        createToast('At least one document file is required.', 'error');
+                        const msg = 'At least one document file is required.';
+                        showError(msg);
+                        createToast(msg, 'error');
+                        
+                        // Reset button state if submission is prevented
+                        submitButton.disabled = false;
+                        submitButton.classList.remove('opacity-75', 'cursor-not-allowed');
+                        if (spinner) spinner.style.display = 'none';
+                        if (buttonText) buttonText.textContent = 'Submit Document';
+
                         return;
                     }
                     
-                    const spinner = submitButton.querySelector('svg');
-                    const buttonText = submitButton.querySelector('.button-text');
+                    // If validation passes, show loading state and disable
                     submitButton.disabled = true;
                     if (spinner) spinner.style.display = 'inline-block';
                     if (buttonText) buttonText.textContent = 'Submitting...';
+                    submitButton.classList.add('opacity-75', 'cursor-not-allowed');
                 });
             }
         });
