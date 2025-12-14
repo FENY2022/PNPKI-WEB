@@ -19,14 +19,35 @@ if ($_SESSION['role'] != 'Initiator' && $_SESSION['role'] != 'Admin') {
 }
 $initiator_id = $_SESSION['user_id'];
 
-// --- 2. Get Section Chiefs for the dropdown ---
+// --- 2. Get Section Chiefs for the dropdown (UPDATED JOIN) ---
+// Fetches distinct signatories by joining office_station and document_signatories
 try {
-    $sql = "SELECT user_id, first_name, last_name FROM users WHERE role = 'Section Chief' AND status = 'active'";
-    $result = $conn->query($sql);
-    if ($result->num_rows > 0) {
-        while($row = $result->fetch_assoc()) {
-            $section_chiefs[] = $row;
+    if (isset($_SESSION['signatory_station'])) {
+        $station_filter = $_SESSION['signatory_station'];
+        
+        // UPDATED SQL: Inner Join office_station and document_signatories
+        // Filter: office_station.station = $station_filter
+        // Join: document_signatories.batch_id = office_station.id
+        $sql = "SELECT DISTINCT ds.user_id, ds.full_name 
+                FROM document_signatories ds
+                INNER JOIN office_station os ON ds.batch_id = os.id
+                WHERE os.station = ?";
+                
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("s", $station_filter);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            while($row = $result->fetch_assoc()) {
+                $section_chiefs[] = $row;
+            }
         }
+        $stmt->close();
+
+    } else {
+        // Optional: Handle case where session variable is missing
+        // $errors[] = "Signatory station not set in session. Please log in again.";
     }
 } catch (Exception $e) {
     // This is a critical error, stop the page
@@ -142,14 +163,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt_action->execute();
             
             $conn->commit();
-            // MODIFICATION: Set success toast
+            
+            // Set success toast
             $toasts[] = ['type' => 'success', 'message' => 'Document successfully submitted with ' . count($uploaded_files) . ' file(s)!'];
         
         } catch (Exception $e) {
             $conn->rollback();
-            // MODIFICATION: Set error toast
+            
+            // Set error toast
             $toasts[] = ['type' => 'error', 'message' => 'Database transaction failed: ' . $e->getMessage()];
             
+            // Cleanup uploaded files if DB insert failed
             foreach ($uploaded_files as $file) {
                 if (file_exists($file['new_path'])) {
                     unlink($file['new_path']);
@@ -157,8 +181,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
         }
     }
-    // Note: If $errors was not empty, the script skips to HTML rendering
-    // and the $errors array is displayed in the red box.
 }
 ?>
 
@@ -177,7 +199,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             background-color: #f3f4f6; /* bg-gray-100 */
         }
         
-        /* --- MODIFICATION: Drag-and-Drop Zone Styles --- */
+        /* Drag-and-Drop Zone Styles */
         #drop-zone {
             border: 2px dashed #d1d5db; /* border-gray-300 */
             border-radius: 0.5rem; /* rounded-lg */
@@ -191,7 +213,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             background-color: #eff6ff; /* bg-blue-50 */
         }
 
-        /* --- MODIFICATION: File List Item Styles --- */
+        /* File List Item Styles */
         .file-list-item {
             display: flex;
             align-items: center;
@@ -203,7 +225,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin-top: 0.5rem;
         }
 
-        /* --- MODIFICATION: Toast Notification Styles --- */
+        /* Toast Notification Styles */
         #toast-container {
             position: fixed;
             top: 1.5rem; /* top-6 */
@@ -262,28 +284,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
 
-    <!-- MODIFICATION: Toast Container -->
     <div id="toast-container"></div>
 
     <form action="new_document.php" method="POST" enctype="multipart/form-data" id="new-doc-form">
-        <!-- Main header -->
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold text-gray-900">
                 Submit New Document
             </h1>
             <button type="submit" id="submit-button"
                     class="flex justify-center py-2.5 px-6 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                <!-- Spinner (hidden by default) -->
                 <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24" style="display: none;">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <!-- Button Text -->
                 <span class="button-text">Submit Document</span>
             </button>
         </div>
 
-        <!-- MODIFICATION: In-page validation error box -->
         <?php if (!empty($errors)): ?>
             <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg" role="alert">
                 <p class="font-bold">Errors Found:</p>
@@ -295,10 +312,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         <?php endif; ?>
 
-        <!-- MODIFICATION: Two-column layout -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
-            <!-- Column 1: Document Details -->
             <div class="bg-white p-8 rounded-lg shadow-md space-y-6">
                 <h2 class="text-xl font-semibold text-gray-900 border-b pb-3">1. Document Details</h2>
                 
@@ -329,11 +344,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <option value="">Select a Section Chief...</option>
                         <?php foreach ($section_chiefs as $chief): ?>
                             <option value="<?php echo $chief['user_id']; ?>" <?php echo (isset($_POST['section_chief_id']) && $_POST['section_chief_id'] == $chief['user_id']) ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($chief['first_name'] . ' ' . $chief['last_name']); ?>
+                                <?php echo htmlspecialchars($chief['full_name']); ?>
                             </option>
                         <?php endforeach; ?>
                         <?php if (empty($section_chiefs)): ?>
-                            <option value="" disabled>No active Section Chiefs found.</option>
+                            <option value="" disabled>No signatories found for your station.</option>
                         <?php endif; ?>
                     </select>
                 </div>
@@ -345,16 +360,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
             </div>
             
-            <!-- Column 2: File Uploader -->
             <div class="bg-white p-8 rounded-lg shadow-md space-y-6">
                 <h2 class="text-xl font-semibold text-gray-900 border-b pb-3">2. Attach Files</h2>
                 
                 <div>
-                    <!-- MODIFICATION: This is the hidden file input -->
                     <input type="file" id="document_files_input" name="document_files[]" multiple required 
                            class="hidden">
                            
-                    <!-- MODIFICATION: Drag-and-Drop Zone -->
                     <div id="drop-zone">
                         <div class="flex flex-col items-center">
                             <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V7a4 4 0 014-4h.586a1 1 0 01.707.293l.828.828A1 1 0 009.828 4H14.172a1 1 0 00.707-.293l.828-.828A1 1 0 0116.414 3H17a4 4 0 014 4v5a4 4 0 01-4 4H7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 16v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2m16-4h-2m-2 0h-2m-2 0H9m-2 0H5"></path></svg>
@@ -365,12 +377,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         </div>
                     </div>
                     
-                    <!-- This is the container for the displayed file list -->
                     <div id="file-list-container" class="mt-4 space-y-2">
-                        <!-- File items will be injected here by JS -->
-                    </div>
+                        </div>
                     
-                    <!-- "Add More Files" button -->
                     <label for="document_files_input_label" id="add-more-files-label" class="mt-4 inline-block cursor-pointer px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 hidden">
                         + Add More Files
                     </label>
@@ -379,10 +388,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
             </div>
 
-        </div> <!-- End grid -->
-    </form>
+        </div> </form>
 
-    <!-- MODIFICATION: JavaScript for file handling and toasts -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             
@@ -520,11 +527,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     
                     let fileIcon = `<svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
                     if (['doc', 'docx'].includes(fileExt)) {
-                        fileIcon = `<svg class="w-6 h-6 text-blue-500" ... >...</svg>`; // Add Word icon SVG
+                        fileIcon = `<svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
                     } else if (['xls', 'xlsx'].includes(fileExt)) {
-                        fileIcon = `<svg class="w-6 h-6 text-green-500" ... >...</svg>`; // Add Excel icon SVG
+                        fileIcon = `<svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
                     } else if (fileExt === 'pdf') {
-                        fileIcon = `<svg class="w-6 h-6 text-red-500" ... >...</svg>`; // Add PDF icon SVG
+                        fileIcon = `<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
                     }
 
                     fileItem.innerHTML = `
