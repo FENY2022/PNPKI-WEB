@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 14, 2025 at 04:23 AM
+-- Generation Time: Dec 14, 2025 at 10:42 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -98,7 +98,9 @@ INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `offic
 (52, 781, 1, 'REGIONAL OFFICE', 'RO SMD', '2025-11-23 08:32:53', NULL, NULL, 32, 'Juliet B. Ilogon'),
 (53, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-11-23 08:32:53', NULL, NULL, 32, 'Claudio A. Nistal, Jr.'),
 (54, 915, 2, 'REGIONAL OFFICE', 'REGIONAL OFFICE', '2025-11-23 08:35:18', NULL, NULL, 34, 'Claudio A. Nistal, Jr.'),
-(55, 781, 1, 'REGIONAL OFFICE', 'RO SMD', '2025-11-23 08:35:18', NULL, NULL, 34, 'Juliet B. Ilogon');
+(55, 781, 1, 'REGIONAL OFFICE', 'RO SMD', '2025-11-23 08:35:18', NULL, NULL, 34, 'Juliet B. Ilogon'),
+(56, 52, 1, 'REGIONAL OFFICE', 'RO ARD', '2025-12-14 03:42:55', NULL, NULL, 35, 'ATTY. CLAUDIO A. NISTAL JR.'),
+(57, 53, 2, 'REGIONAL OFFICE', 'RO ORED', '2025-12-14 03:42:55', NULL, NULL, 35, 'MARITESS M. OCAMPO');
 
 -- --------------------------------------------------------
 
@@ -109,17 +111,20 @@ INSERT INTO `document_signatories` (`doc_id`, `user_id`, `signing_order`, `offic
 CREATE TABLE `office_station` (
   `id` int(11) NOT NULL,
   `office` varchar(255) NOT NULL,
-  `station` varchar(255) NOT NULL
+  `station` varchar(255) NOT NULL,
+  `service_start` date DEFAULT NULL,
+  `service_end` date DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `office_station`
 --
 
-INSERT INTO `office_station` (`id`, `office`, `station`) VALUES
-(31, 'REGIONAL OFFICE', 'RO PMD'),
-(32, 'REGIONAL OFFICE', 'RO ASD'),
-(34, 'REGIONAL OFFICE', 'RO SMD');
+INSERT INTO `office_station` (`id`, `office`, `station`, `service_start`, `service_end`) VALUES
+(31, 'REGIONAL OFFICE', 'RO PMD', NULL, NULL),
+(32, 'REGIONAL OFFICE', 'RO ASD', NULL, NULL),
+(34, 'REGIONAL OFFICE', 'RO SMD', NULL, NULL),
+(35, 'REGIONAL OFFICE', 'RO MS', '2025-12-01', NULL);
 
 -- --------------------------------------------------------
 
@@ -214,7 +219,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `documents`
 --
 ALTER TABLE `documents`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `document_actions`
@@ -232,13 +237,13 @@ ALTER TABLE `document_files`
 -- AUTO_INCREMENT for table `document_signatories`
 --
 ALTER TABLE `document_signatories`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58;
 
 --
 -- AUTO_INCREMENT for table `office_station`
 --
 ALTER TABLE `office_station`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `users`
