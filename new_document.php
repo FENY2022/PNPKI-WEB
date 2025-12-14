@@ -72,14 +72,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $errors[] = "At least one document file upload is required.";
     } else {
         $file_count = count($_FILES['document_files']['name']);
-        if ($file_count > 10) {
-            $errors[] = "You can upload a maximum of 10 files at a time.";
+        // MODIFIED: Increased max file limit from 10 to 20
+        if ($file_count > 20) {
+            $errors[] = "You can upload a maximum of 20 files at a time.";
         }
     }
 
     // 3.2: Process File Upload (if no validation errors)
     $uploaded_files = []; 
     if (empty($errors)) {
+        // CONFIRMED: Includes PDF, DOCX, XLSX, etc.
         $allowed_ext = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
         $upload_dir = 'uploads/';
 
@@ -378,7 +380,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <p class="mt-2 text-sm text-gray-600">
                                 <span class="font-semibold text-blue-600">Drag files here</span> or click to select
                             </p>
-                            <p class="text-xs text-gray-500 mt-1">Max 10 files. PDF, DOC, XLS, PPT.</p>
+                            <p class="text-xs text-gray-500 mt-1">Max 20 files. PDF, DOC, XLS, PPT.</p>
                         </div>
                     </div>
                     
@@ -452,7 +454,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             const fileListContainer = document.getElementById('file-list-container');
             const addMoreLabel = document.getElementById('add-more-files-label');
             const errorMsg = document.getElementById('file-error-msg');
-            const maxFiles = 10;
+            // MODIFIED: Updated max file limit to 20
+            const maxFiles = 20; 
             const fileStore = new DataTransfer(); // Master file list
 
             // Trigger hidden file input when drop zone is clicked
@@ -498,7 +501,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
                 
-                // CRITICAL: Ensure the actual input has the files for immediate UI/prop checks
+                // CRITICAL FIX: Ensure the actual input has the files for immediate UI/prop checks
                 fileInput.files = fileStore.files; 
                 renderFileList();
             }
