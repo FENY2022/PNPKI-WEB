@@ -25,7 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $sex = $_POST['sex'];
-        // CHANGED: Now getting ID from hidden input
         $otos_link = isset($_POST['otos_userlink']) ? (int)$_POST['otos_userlink'] : 0;
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -58,10 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action']) && $_POST['action'] === 'update_user') {
         $user_id = (int)$_POST['user_id'];
         $role = $_POST['role'];
-        
-        // --- FIX: Check if status is set to prevent Undefined Array Key error ---
         $status = isset($_POST['status']) ? $_POST['status'] : 'active';
-        
         $division = trim($_POST['division']);
         $position = trim($_POST['position']);
         $fname = trim($_POST['first_name']);
@@ -98,17 +94,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error_msg = "Password must be at least 8 characters.";
         }
     }
+
+    // D. Delete User (NEW)
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_user') {
+        $user_id = (int)$_POST['user_id'];
+        
+        // Prevent deleting own account
+        if ($user_id == $_SESSION['user_id']) {
+            $error_msg = "You cannot delete your own account.";
+        } else {
+            $stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
+            $stmt->bind_param("i", $user_id);
+            if ($stmt->execute()) {
+                $success_msg = "User deleted successfully.";
+            } else {
+                $error_msg = "Error deleting user: " . $conn->error;
+            }
+            $stmt->close();
+        }
+    }
 }
 
-// --- 3. Fetch OTOS Employees (With Console Error Reporting) ---
+// --- 3. Fetch OTOS Employees (With Position & Designation) ---
 $otos_employees = [];
 $otos_error_console = null; 
 
 try {
     $conn_otos = get_db_connection(); 
     if ($conn_otos) {
-        // Fetch Full_Name explicitly
-        $sql_otos = "SELECT id, first_name, last_name, Full_Name FROM useremployee ORDER BY last_name ASC";
+        // Updated Query: Added Position and Designation
+        $sql_otos = "SELECT id, first_name, last_name, Full_Name, Position, Designation FROM useremployee ORDER BY last_name ASC";
         $result_otos = $conn_otos->query($sql_otos);
         
         if ($result_otos) {
@@ -134,8 +149,6 @@ $params = [];
 $types = "";
 
 if ($search) {
-    // Note: 'Full_Name' is not in 'users' table based on your SQL dump, 
-    // removed it from here to avoid SQL error on the main list search.
     $where_sql .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR division LIKE ?)";
     $s_term = "%$search%";
     $params = [$s_term, $s_term, $s_term, $s_term];
@@ -279,7 +292,13 @@ function getInitials($fname, $lname) {
                                 </span>
                             </td>
                             <td class="px-6 py-4 text-right">
-                                <button onclick='openEditModal(<?php echo json_encode($u); ?>)' class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">Edit</button>
+                                <button onclick='openEditModal(<?php echo json_encode($u); ?>)' class="text-indigo-600 hover:text-indigo-900 text-sm font-medium mr-3">Edit</button>
+                                
+                                <form action="" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to permanently delete this user? This action cannot be undone.');">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="user_id" value="<?php echo $u['user_id']; ?>">
+                                    <button type="submit" class="text-red-600 hover:text-red-900 text-sm font-medium">Delete</button>
+                                </form>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -498,7 +517,7 @@ function getInitials($fname, $lname) {
 
     <div id="otosModal" class="modal opacity-0 pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black opacity-60" onclick="closeOtosModal()"></div>
-        <div class="bg-white w-full max-w-2xl mx-4 rounded-xl shadow-2xl z-50 overflow-hidden transform transition-all scale-95 flex flex-col max-h-[80vh]" id="otosModalContent">
+        <div class="bg-white w-full max-w-4xl mx-4 rounded-xl shadow-2xl z-50 overflow-hidden transform transition-all scale-95 flex flex-col max-h-[80vh]" id="otosModalContent">
             
             <div class="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
                 <h3 class="text-lg font-bold text-indigo-900">Select OTOS Employee</h3>
@@ -516,6 +535,8 @@ function getInitials($fname, $lname) {
                     <thead class="bg-gray-50 sticky top-0">
                         <tr>
                             <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Employee Name</th>
+                            <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Position</th>
+                            <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Designation</th>
                             <th class="px-6 py-3 text-xs font-semibold text-gray-600 uppercase text-right">Action</th>
                         </tr>
                     </thead>
@@ -524,10 +545,16 @@ function getInitials($fname, $lname) {
                         <tr class="hover:bg-indigo-50 transition-colors">
                             <td class="px-6 py-3 text-sm text-gray-800 font-medium">
                                 <?php 
-                                // UPDATED: Display Full_Name specifically so the search filters on this field
                                 echo htmlspecialchars(!empty($emp['Full_Name']) ? $emp['Full_Name'] : $emp['last_name'] . ', ' . $emp['first_name']); 
                                 ?>
                             </td>
+                            <td class="px-6 py-3 text-sm text-gray-600">
+                                <?php echo htmlspecialchars($emp['Position'] ?? ''); ?>
+                            </td>
+                            <td class="px-6 py-3 text-sm text-gray-600">
+                                <?php echo htmlspecialchars($emp['Designation'] ?? ''); ?>
+                            </td>
+                            
                             <td class="px-6 py-3 text-right">
                                 <button type="button" 
                                         onclick="selectOtosEmployee(<?php echo $emp['id']; ?>, '<?php echo htmlspecialchars(!empty($emp['Full_Name']) ? $emp['Full_Name'] : $emp['last_name'] . ', ' . $emp['first_name'], ENT_QUOTES); ?>')"
