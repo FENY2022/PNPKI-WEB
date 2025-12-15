@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 14, 2025 at 10:42 AM
+-- Generation Time: Dec 15, 2025 at 03:30 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -33,10 +33,19 @@ CREATE TABLE `documents` (
   `doc_type` varchar(100) NOT NULL,
   `status` enum('Draft','Review','Signing','Completed','Returned','Archived') NOT NULL,
   `initiator_id` int(11) NOT NULL,
-  `current_owner_id` int(11) NOT NULL,
+  `current_owner_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `documents`
+--
+
+INSERT INTO `documents` (`doc_id`, `title`, `doc_type`, `status`, `initiator_id`, `current_owner_id`, `created_at`, `updated_at`) VALUES
+(12, 'MEMO', 'Memorandum', 'Draft', 7, 52, '2025-12-15 00:46:20', '2025-12-15 00:46:20'),
+(13, 'MEMO', 'Memorandum', 'Draft', 7, 52, '2025-12-15 01:02:12', '2025-12-15 01:02:12'),
+(14, 'MEMO', 'Memorandum', 'Draft', 7, 52, '2025-12-15 02:04:23', '2025-12-15 02:04:23');
 
 -- --------------------------------------------------------
 
@@ -53,6 +62,15 @@ CREATE TABLE `document_actions` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `document_actions`
+--
+
+INSERT INTO `document_actions` (`action_id`, `doc_id`, `user_id`, `action`, `message`, `created_at`) VALUES
+(1, 12, 7, 'Submitted', '', '2025-12-15 00:46:20'),
+(2, 13, 7, 'Submitted', '', '2025-12-15 01:02:12'),
+(3, 14, 7, 'Submitted', '', '2025-12-15 02:04:23');
+
 -- --------------------------------------------------------
 
 --
@@ -68,6 +86,15 @@ CREATE TABLE `document_files` (
   `version` int(11) NOT NULL DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `document_files`
+--
+
+INSERT INTO `document_files` (`file_id`, `doc_id`, `uploader_id`, `filename`, `filepath`, `version`, `created_at`) VALUES
+(1, 12, 7, 'SO-2025-886.pdf', 'uploads/doc_693f5a5cbf40a9.45878541.pdf', 1, '2025-12-15 00:46:20'),
+(2, 13, 7, '02_Sorption-Hysteresis-of-Wood.pdf', 'uploads/doc_693f5e14488bc0.42032300.pdf', 1, '2025-12-15 01:02:12'),
+(3, 14, 7, 'ADMIN and PLANNING SECTION.docx', 'uploads/doc_693f6ca755e8e1.12545574.docx', 1, '2025-12-15 02:04:23');
 
 -- --------------------------------------------------------
 
@@ -162,7 +189,9 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`, `profile_picture_path`) VALUES
 (3, 'venzonanthonie@gmail.com', '$2y$10$d86o9GS8gWa5ikqzqeW4.u2hHldY5wFQtTMQSAvRnhpIhPV936twK', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, 'uploads/profile_pics/3_d8a0add5e7a4.png'),
-(7, 'yowaf85723@naqulu.com', '$2y$10$rdfGhCcVTMDql9EXMBj3vON3FD2dYNXzS7zh3xbCwFzc2iUwMAfKq', 'MARY KATHLEEN', 'KATHLEEN P.', 'PO', '', 'PLANNING V', 'CHIEF PMD', 'PLANNNING AND MANAGEMENT DIVISION', 'Female', '09329342620', 'Initiator', 'active', 'b30c41b2e656af6a8de8f5e1a9533b525f0360bee1fcd44535f75a7fde955b2c', '2025-12-10 23:57:26', NULL, NULL, '2025-12-10 21:57:26', 56, 'uploads/profile_pics/7_cbd67e9f808b.jpg');
+(7, 'yowaf85723@naqulu.com', '$2y$10$rdfGhCcVTMDql9EXMBj3vON3FD2dYNXzS7zh3xbCwFzc2iUwMAfKq', 'MARY KATHLEEN', 'KATHLEEN P.', 'PO', '', 'PLANNING V', 'CHIEF PMD', 'PLANNNING AND MANAGEMENT DIVISION', 'Female', '09329342620', 'Initiator', 'active', 'b30c41b2e656af6a8de8f5e1a9533b525f0360bee1fcd44535f75a7fde955b2c', '2025-12-10 23:57:26', NULL, NULL, '2025-12-10 21:57:26', 56, 'uploads/profile_pics/7_cbd67e9f808b.jpg'),
+(52, 'claudio.nistal.atty@denr.gov.ph', 'hash', 'CLAUDIO', NULL, 'NISTAL JR.', NULL, '', NULL, '', NULL, NULL, 'ARD', 'active', NULL, NULL, NULL, NULL, '2025-12-15 00:45:36', 915, NULL),
+(915, 'claudio.nistal@denr.gov.ph', '$2y$10$YourHashHereOrUseDefault', 'CLAUDIO', NULL, 'NISTAL JR.', NULL, NULL, NULL, NULL, NULL, NULL, 'Section Chief', 'active', NULL, NULL, NULL, NULL, '2025-12-15 01:01:52', 0, NULL);
 
 --
 -- Indexes for dumped tables
@@ -219,19 +248,19 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `documents`
 --
 ALTER TABLE `documents`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `document_actions`
 --
 ALTER TABLE `document_actions`
-  MODIFY `action_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `action_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `document_files`
 --
 ALTER TABLE `document_files`
-  MODIFY `file_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `file_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `document_signatories`
@@ -249,7 +278,7 @@ ALTER TABLE `office_station`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=916;
 
 --
 -- Constraints for dumped tables
