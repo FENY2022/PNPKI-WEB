@@ -345,7 +345,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
 
                 <div>
-                    <label for="section_chief_id" class="block text-sm font-medium text-gray-700">Route to Section Chief <span class="text-red-500">*</span></label>
+                    <label for="section_chief_id" class="block text-sm font-medium text-gray-700">Route to Section/Division Chief/ARDS <span class="text-red-500">*</span></label>
                     <select id="section_chief_id" name="section_chief_id" required 
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                         <option value="">Select a Section Chief...</option>
