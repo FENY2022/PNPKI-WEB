@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'db.php';               // Local Database Connection
+require_once 'db.php';                // Local Database Connection
 require_once 'db_international.php'; // External OTOS Database Connection
 
 // --- 1. Security & Access Control ---
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // D. Delete User (NEW)
+    // D. Delete User
     if (isset($_POST['action']) && $_POST['action'] === 'delete_user') {
         $user_id = (int)$_POST['user_id'];
         
@@ -122,7 +122,6 @@ $otos_error_console = null;
 try {
     $conn_otos = get_db_connection(); 
     if ($conn_otos) {
-        // Updated Query: Added Position and Designation
         $sql_otos = "SELECT id, first_name, last_name, Full_Name, Position, Designation FROM useremployee ORDER BY last_name ASC";
         $result_otos = $conn_otos->query($sql_otos);
         
@@ -290,6 +289,14 @@ function getInitials($fname, $lname) {
                                 <span class="px-2.5 py-1 rounded-full text-xs font-semibold <?php echo $sClass; ?>">
                                     <?php echo ucfirst($u['status']); ?>
                                 </span>
+
+                                <?php if (!empty($u['otos_userlink']) && $u['otos_userlink'] > 0): ?>
+                                    <div class="mt-1.5">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                            <i class="fas fa-check-circle text-blue-500"></i> OTOS Verified
+                                        </span>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 text-right">
                                 <button onclick='openEditModal(<?php echo json_encode($u); ?>)' class="text-indigo-600 hover:text-indigo-900 text-sm font-medium mr-3">Edit</button>

@@ -9,67 +9,61 @@ if (!isset($_SESSION['user_id'])) {
 
 // --- 2. Get User Data from Session ---
 $user_id = (int)$_SESSION['user_id'];
-$full_name = $_SESSION['full_name'];
-$role = $_SESSION['role'];
-$email = $_SESSION['email'];
+$full_name = $_SESSION['full_name'] ?? 'User';
+$role = $_SESSION['role'] ?? 'User';
+$email = $_SESSION['email'] ?? '';
 
-$otos_userlink = $_SESSION['otos_userlink'];
+// Fix: Use null coalescing (??) to prevent "Undefined index" error
+$otos_userlink = $_SESSION['otos_userlink'] ?? null;
 
 
 // --- 3. DB Connection (Local / ddts_pnpki) ---
-// This connection is used for fetching the profile picture and other local data.
 $conn = null;
-if (file_exists(__DIR__ . '/config.php')) {
-    require_once __DIR__ . '/config.php';
-} elseif (file_exists(__DIR__ . '/db.php')) {
-    require_once __DIR__ . '/db.php';
-} else {
-    // Fallback MySQLi connection
-    $dbHost = '127.0.0.1';
-    $dbName = 'ddts_pnpki';
-    $dbUser = 'root';
-    $dbPass = '';
-    
-    $conn = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
-    
-    if ($conn->connect_error) {
-        $conn = null; 
+try {
+    if (file_exists(__DIR__ . '/config.php')) {
+        require_once __DIR__ . '/config.php';
+    } elseif (file_exists(__DIR__ . '/db.php')) {
+        require_once __DIR__ . '/db.php';
+    } else {
+        // Fallback MySQLi connection
+        $conn = new mysqli('127.0.0.1', 'root', '', 'ddts_pnpki');
     }
+} catch (Exception $e) {
+    // If local DB fails, stop script but show message (instead of 500 error)
+    die("System Error: Local Database Connection Failed. " . $e->getMessage());
 }
 
-// --- 3.5 Fetch Signatory_Station (FIXED LOGIC) ---
-// We use the external connection (db_international.php) for this specific query.
+// --- 3.5 Fetch Signatory_Station (ROBUST FIX) ---
+// We use the external connection (db_international.php).
+// Added try-catch to prevent 500 Error if this remote DB is offline.
 $signatory_station = ""; 
 
-if (isset($otos_userlink) && file_exists(__DIR__ . '/db_international.php')) {
-    
-    // 1. Include the external DB configuration
-    require_once __DIR__ . '/db_international.php';
-    
-    // 2. Get the connection to the OTOS database
-    // Note: This function handles its own error logging/connection failures.
-    $otos_conn = get_db_connection();
-
-    if ($otos_conn instanceof mysqli) {
-        // 3. Query the 'useremployee' table in the remote DB
-        $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
+if (!empty($otos_userlink) && file_exists(__DIR__ . '/db_international.php')) {
+    try {
+        require_once __DIR__ . '/db_international.php';
         
-        if ($stmt_sig = $otos_conn->prepare($sql_sig)) {
-            $stmt_sig->bind_param("i", $otos_userlink);
-            $stmt_sig->execute();
-            $stmt_sig->bind_result($signatory_station);
-            $stmt_sig->fetch();
-            $stmt_sig->close();
-            
-            // Echo the result as originally requested
-             $_SESSION['signatory_station'] = $signatory_station; 
+        if (function_exists('get_db_connection')) {
+            $otos_conn = get_db_connection();
 
-
-       
+            if ($otos_conn instanceof mysqli) {
+                $sql_sig = "SELECT Signatory_Station FROM useremployee WHERE id = ?";
+                
+                if ($stmt_sig = $otos_conn->prepare($sql_sig)) {
+                    $stmt_sig->bind_param("i", $otos_userlink);
+                    $stmt_sig->execute();
+                    $stmt_sig->bind_result($signatory_station);
+                    $stmt_sig->fetch();
+                    $stmt_sig->close();
+                    
+                    // Update session
+                    $_SESSION['signatory_station'] = $signatory_station; 
+                }
+                $otos_conn->close();
+            }
         }
-        
-        // Close the external connection
-        $otos_conn->close();
+    } catch (Throwable $e) {
+        // Silently fail if external DB is down, so the Dashboard still loads
+        error_log("OTOS Database Error: " . $e->getMessage());
     }
 }
 
@@ -78,21 +72,39 @@ if (isset($otos_userlink) && file_exists(__DIR__ . '/db_international.php')) {
 $profile_picture_path = $_SESSION['profile_picture_path'] ?? null;
 
 if ($conn && $user_id && $profile_picture_path === null) {
-    
-    $stmt = $conn->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
-    
-    if ($stmt) {
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_assoc();
-            $profile_picture_path = $row['profile_picture_path'];
-            $_SESSION['profile_picture_path'] = $profile_picture_path;
+    try {
+        $stmt = $conn->prepare("SELECT profile_picture_path FROM users WHERE user_id = ?");
+        if ($stmt) {
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows > 0) {
+                $row = $result->fetch_assoc();
+                $profile_picture_path = $row['profile_picture_path'];
+                $_SESSION['profile_picture_path'] = $profile_picture_path;
+            }
+            $stmt->close();
         }
-        
-        $stmt->close();
+    } catch (Exception $e) {
+        // Ignore profile pic error
+    }
+}
+
+// --- 5. Fetch Notification Count for Admin (Unlinked Users) ---
+$unlinked_users_count = 0;
+if ($role === 'Admin' && $conn) {
+    try {
+        // Count users where otos_userlink is 0
+        $stmt_notify = $conn->prepare("SELECT COUNT(*) FROM users WHERE otos_userlink = 0");
+        if ($stmt_notify) {
+            $stmt_notify->execute();
+            $stmt_notify->bind_result($unlinked_users_count);
+            $stmt_notify->fetch();
+            $stmt_notify->close();
+        }
+    } catch (Exception $e) {
+        // Silent fail so dashboard doesn't break
     }
 }
 
@@ -108,12 +120,11 @@ function initials($name) {
 }
 $initials = initials($full_name);
 
-// Close local connection
+// Close local connection if open
 if ($conn instanceof mysqli && !empty($conn->thread_id)) {
     $conn->close();
 }
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en" class="h-full">
@@ -127,12 +138,12 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
 
 
     <style>
-        /* Import Inter for consistency with original. Use Poppins if preferred, but Inter looks good here. */
+        /* Import Inter for consistency */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         html, body { height: 100%; }
         body { 
             font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; 
-            background-color: #f7f9fc; /* Light background for modern feel */
+            background-color: #f7f9fc; 
         }
 
         /* Preloader */
@@ -144,15 +155,12 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
         }
         #preloader.hidden { opacity: 0; pointer-events: none; }
 
-        /* Enhanced Card Shadow */
-        .card-shadow { box-shadow: 0 10px 30px rgba(15,23,42,0.08); }
-
         /* Sidebar active */
         .sidebar-link.active {
-            background-color: #e0f2fe; /* Light blue background */
-            color: #1d4ed8; /* Darker blue text */
+            background-color: #e0f2fe; 
+            color: #1d4ed8; 
             font-weight: 600;
-            border-left: 4px solid #3b82f6; /* Accent border */
+            border-left: 4px solid #3b82f6; 
             padding-left: 12px !important;
         }
         .sidebar-link {
@@ -163,9 +171,6 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             background-color: #f3f4f6;
         }
 
-        /* Smooth transition for iframe resize */
-        iframe { transition: height .12s ease; }
-
         /* Avatar initials styling */
         .avatar-initials {
             display: inline-flex; align-items:center; justify-content:center;
@@ -174,7 +179,6 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
             font-weight: 600;
         }
 
-        /* Header buttons focus ring */
         .header-btn:focus {
             outline: none;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
@@ -371,8 +375,15 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
 
                     <a href="manageuser.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
                         <i class="fas fa-user-edit w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
-                        <span>Manage User</span>
+                        <span class="flex-1">Manage User</span>
+                        
+                        <?php if ($unlinked_users_count > 0): ?>
+                            <span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm" title="<?php echo $unlinked_users_count; ?> users need OTOS link">
+                                <?php echo $unlinked_users_count; ?>
+                            </span>
+                        <?php endif; ?>
                     </a>
+                    
                     <a href="admin_settings.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
                         <i class="fas fa-cogs w-5 h-5 text-gray-600 group-hover:text-gray-700"></i>
                         <span>Settings</span>
@@ -432,7 +443,15 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <div class="mt-3 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Admin Tools</div>
                         <a href="admin_users.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">User Management</a>
                         
-                        <a href="manageuser.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Manage User</a>
+                        <a href="manageuser.php" target="content_frame" class="mobile-link w-full py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between">
+                            <span>Manage User</span>
+                            <?php if ($unlinked_users_count > 0): ?>
+                                <span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                    <?php echo $unlinked_users_count; ?>
+                                </span>
+                            <?php endif; ?>
+                        </a>
+
                         <a href="admin_settings.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Settings</a>
                         <a href="signat_path.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Signatory Path</a>
                         <a href="office_stationManagement.php" target="content_frame" class="mobile-link block py-2 px-3 rounded-md text-sm text-gray-700 hover:bg-gray-50">Office Station Management</a>
