@@ -17,6 +17,7 @@ if ($_SESSION['role'] != 'Initiator' && $_SESSION['role'] != 'Admin') {
             <p style='color: #4B5563;'>Only users with the 'Initiator' role can submit new documents.</p>
          </div>");
 }
+
 $initiator_id = $_SESSION['user_id'];
 
 // --- 2. Get Section Chiefs for the dropdown (UPDATED JOIN) ---
