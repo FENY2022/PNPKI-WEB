@@ -20,15 +20,11 @@ if ($_SESSION['role'] != 'Initiator' && $_SESSION['role'] != 'Admin') {
 
 $initiator_id = $_SESSION['user_id'];
 
-// --- 2. Get Section Chiefs for the dropdown (UPDATED JOIN) ---
-// Fetches distinct signatories by joining office_station and document_signatories
+// --- 2. Get Section Chiefs for the dropdown ---
 try {
     if (isset($_SESSION['signatory_station'])) {
         $station_filter = $_SESSION['signatory_station'];
         
-        // UPDATED SQL: Inner Join office_station and document_signatories
-        // Filter: office_station.station = $station_filter
-        // Join: document_signatories.batch_id = office_station.id
         $sql = "SELECT DISTINCT ds.user_id, ds.full_name 
                 FROM document_signatories ds
                 INNER JOIN office_station os ON ds.batch_id = os.id
@@ -46,12 +42,8 @@ try {
         }
         $stmt->close();
 
-    } else {
-        // Optional: Handle case where session variable is missing
-        // $errors[] = "Signatory station not set in session. Please log in again.";
     }
 } catch (Exception $e) {
-    // This is a critical error, stop the page
     die("Error: Could not load Section Chiefs list. " . $e->getMessage());
 }
 
@@ -63,32 +55,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $doc_type = trim($_POST['doc_type']);
     $section_chief_id = trim($_POST['section_chief_id']);
     $message = trim($_POST['message']);
+    
+    // NEW: Capture Submission Status
+    $submission_status = isset($_POST['submission_status']) ? trim($_POST['submission_status']) : 'Draft';
 
-    // Pre-submission validation (will show in the red box)
+    // Pre-submission validation
     if (empty($title)) $errors[] = "Document Title is required.";
     if (empty($doc_type)) $errors[] = "Document Type is required.";
     if (empty($section_chief_id)) $errors[] = "You must select a Section Chief to route to.";
     
+    // Validate Status (Security check)
+    if (!in_array($submission_status, ['Draft', 'Final'])) {
+        $submission_status = 'Draft'; // Fallback
+    }
+
     if (!isset($_FILES['document_files']) || empty($_FILES['document_files']['name'][0])) {
         $errors[] = "At least one document file upload is required.";
     } else {
         $file_count = count($_FILES['document_files']['name']);
-        // MODIFIED: Increased max file limit from 10 to 20
         if ($file_count > 20) {
             $errors[] = "You can upload a maximum of 20 files at a time.";
         }
     }
 
-    // 3.2: Process File Upload (if no validation errors)
+    // 3.2: Process File Upload
     $uploaded_files = []; 
     if (empty($errors)) {
-        // CONFIRMED: Includes PDF, DOCX, XLSX, etc.
         $allowed_ext = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
         $upload_dir = 'uploads/';
 
         if (!is_dir($upload_dir)) {
             if (!mkdir($upload_dir, 0755, true)) {
-                $errors[] = "Error: The 'uploads' directory does not exist and could not be created. Please create it manually.";
+                $errors[] = "Error: The 'uploads' directory does not exist and could not be created.";
             }
         }
         
@@ -108,7 +106,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $file_ext_check = strtolower(pathinfo($file_name_orig, PATHINFO_EXTENSION));
                 
                 if (!in_array($file_ext_check, $allowed_ext)) {
-                    $errors[] = "Invalid file type: $file_name_orig. Only PDF, Word, Excel, or PowerPoint files are allowed.";
+                    $errors[] = "Invalid file type: $file_name_orig.";
                 }
                 if ($file_size > 15000000) { // 15MB
                     $errors[] = "File is too large: $file_name_orig. Maximum size is 15MB.";
@@ -126,7 +124,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         'new_path' => $file_path
                     ];
                 } else {
-                    $errors[] = "Failed to move uploaded file: $file_name_orig. Check server permissions on the 'uploads' directory.";
+                    $errors[] = "Failed to move uploaded file: $file_name_orig.";
                     break; 
                 }
             }
@@ -134,19 +132,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     // 3.3: Insert into Database (Transaction)
-    // Only run if validation and file moves succeeded
     if (empty($errors)) {
         $conn->begin_transaction();
         try {
             // Step 1: Insert into `documents` table
+            // MODIFIED: Uses $submission_status variable instead of hardcoded 'Draft'
             $sql_doc = "INSERT INTO documents (title, doc_type, initiator_id, current_owner_id, status) 
-                        VALUES (?, ?, ?, ?, 'Draft')";
+                        VALUES (?, ?, ?, ?, ?)";
             $stmt_doc = $conn->prepare($sql_doc);
-            $stmt_doc->bind_param("ssii", $title, $doc_type, $initiator_id, $section_chief_id);
+            
+            // "ssiis" -> string, string, integer, integer, string
+            $stmt_doc->bind_param("ssiis", $title, $doc_type, $initiator_id, $section_chief_id, $submission_status);
             $stmt_doc->execute();
             $doc_id = $conn->insert_id; 
             
-            // Step 2: Insert into `document_files` table (in a loop)
+            // Step 2: Insert into `document_files` table
             $version = 1; 
             $sql_file = "INSERT INTO document_files (doc_id, uploader_id, filename, filepath, version) 
                          VALUES (?, ?, ?, ?, ?)";
@@ -157,8 +157,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt_file->execute();
             }
 
-            // Step 3: Insert into `document_actions` table (the log)
-            $action = "Submitted";
+            // Step 3: Insert into `document_actions` table
+            // Determine action verb based on status
+            $action = ($submission_status === 'Final') ? "Submitted" : "Saved as Draft";
+            
             $sql_action = "INSERT INTO document_actions (doc_id, user_id, action, message) 
                            VALUES (?, ?, ?, ?)";
             $stmt_action = $conn->prepare($sql_action);
@@ -168,12 +170,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $conn->commit();
             
             // Set success toast
-            $toasts[] = ['type' => 'success', 'message' => 'Document successfully submitted with ' . count($uploaded_files) . ' file(s)!'];
+            $toasts[] = ['type' => 'success', 'message' => "Document successfully {$action} with " . count($uploaded_files) . " file(s)!"];
         
         } catch (Exception $e) {
             $conn->rollback();
-            
-            // Set error toast
             $toasts[] = ['type' => 'error', 'message' => 'Database transaction failed: ' . $e->getMessage()];
             
             // Cleanup uploaded files if DB insert failed
@@ -198,50 +198,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body { 
             font-family: 'Inter', sans-serif; 
-            padding: 2.5rem; /* p-10 */
-            background-color: #f3f4f6; /* bg-gray-100 */
+            padding: 2.5rem; 
+            background-color: #f3f4f6; 
         }
         
-        /* Drag-and-Drop Zone Styles */
         #drop-zone {
-            border: 2px dashed #d1d5db; /* border-gray-300 */
-            border-radius: 0.5rem; /* rounded-lg */
-            padding: 2.5rem; /* p-10 */
+            border: 2px dashed #d1d5db; 
+            border-radius: 0.5rem; 
+            padding: 2.5rem; 
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
         }
         #drop-zone.drag-over {
-            border-color: #2563eb; /* border-blue-600 */
-            background-color: #eff6ff; /* bg-blue-50 */
+            border-color: #2563eb; 
+            background-color: #eff6ff; 
         }
 
-        /* File List Item Styles */
         .file-list-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0.75rem; /* p-3 */
-            background-color: #f9fafb; /* bg-gray-50 */
-            border: 1px solid #e5e7eb; /* border-gray-200 */
-            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.75rem; 
+            background-color: #f9fafb; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 0.375rem; 
             margin-top: 0.5rem;
         }
 
-        /* Toast Notification Styles */
         #toast-container {
             position: fixed;
-            top: 1.5rem; /* top-6 */
-            right: 1.5rem; /* right-6 */
+            top: 1.5rem; 
+            right: 1.5rem; 
             z-index: 100;
             display: flex;
             flex-direction: column;
-            gap: 0.75rem; /* gap-3 */
+            gap: 0.75rem; 
         }
         .toast {
             max-width: 320px;
             padding: 1rem;
-            border-radius: 0.5rem; /* rounded-lg */
+            border-radius: 0.5rem; 
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             display: flex;
             align-items: center;
@@ -249,21 +246,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             transform: translateX(100%);
             animation: slideIn 0.5s forwards, fadeOut 0.5s 4.5s forwards;
         }
-        .toast-success {
-            background-color: #ecfdf5; /* bg-green-50 */
-            border: 1px solid #d1fae5; /* border-green-100 */
-        }
-        .toast-error {
-            background-color: #fff1f2; /* bg-red-50 */
-            border: 1px solid #ffe4e6; /* border-red-100 */
-        }
+        .toast-success { background-color: #ecfdf5; border: 1px solid #d1fae5; }
+        .toast-error { background-color: #fff1f2; border: 1px solid #ffe4e6; }
         .toast .icon { margin-right: 0.75rem; }
-        .toast .message { 
-            font-size: 0.875rem; /* text-sm */
-            font-weight: 500; 
-        }
-        .toast-success .message { color: #059669; } /* text-green-700 */
-        .toast-error .message { color: #e11d48; } /* text-red-700 */
+        .toast .message { font-size: 0.875rem; font-weight: 500; }
+        .toast-success .message { color: #059669; }
+        .toast-error .message { color: #e11d48; }
         .toast .close {
             margin-left: auto;
             padding: 0.25rem;
@@ -275,14 +263,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .toast-success .close:hover { background-color: #d1fae5; }
         .toast-error .close:hover { background-color: #ffe4e6; }
 
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes fadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; transform: translateX(100%); }
-        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
     </style>
 </head>
 <body>
@@ -362,6 +344,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
 
                 <div>
+                    <label class="block text-sm font-medium text-gray-700">Submission Status <span class="text-red-500">*</span></label>
+                    <div class="mt-2 flex items-center space-x-6">
+                        <div class="flex items-center">
+                            <input id="status_draft" name="submission_status" type="radio" value="Draft" 
+                                   class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300" 
+                                   <?php echo (!isset($_POST['submission_status']) || $_POST['submission_status'] == 'Draft') ? 'checked' : ''; ?>>
+                            <label for="status_draft" class="ml-2 block text-sm text-gray-700">
+                                Draft <span class="text-gray-500 text-xs">(Edit later)</span>
+                            </label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="status_final" name="submission_status" type="radio" value="Final" 
+                                   class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300"
+                                   <?php echo (isset($_POST['submission_status']) && $_POST['submission_status'] == 'Final') ? 'checked' : ''; ?>>
+                            <label for="status_final" class="ml-2 block text-sm text-gray-700">
+                                Final <span class="text-gray-500 text-xs">(Route to Chief)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
                     <label for="message" class="block text-sm font-medium text-gray-700">Message / Instructions (Optional)</label>
                     <textarea id="message" name="message" rows="6" 
                               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"><?php echo isset($_POST['message']) ? htmlspecialchars($_POST['message']) : ''; ?></textarea>
@@ -423,13 +427,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     </button>
                 `;
                 
-                // Close button
                 toast.querySelector('.close').addEventListener('click', () => {
                     toast.style.animation = 'fadeOut 0.5s forwards';
                     setTimeout(() => toast.remove(), 500);
                 });
                 
-                // Auto-dismiss
                 setTimeout(() => {
                     if (document.body.contains(toast)) {
                         toast.style.animation = 'fadeOut 0.5s forwards';
@@ -455,17 +457,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             const fileListContainer = document.getElementById('file-list-container');
             const addMoreLabel = document.getElementById('add-more-files-label');
             const errorMsg = document.getElementById('file-error-msg');
-            // MODIFIED: Updated max file limit to 20
             const maxFiles = 20; 
-            const fileStore = new DataTransfer(); // Master file list
+            const fileStore = new DataTransfer(); 
 
-            // Trigger hidden file input when drop zone is clicked
             dropZone.addEventListener('click', () => fileInput.click());
-            
-            // "Add More Files" label also triggers the input
             addMoreLabel.addEventListener('click', () => fileInput.click());
             
-            // --- Drag and Drop Events ---
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropZone.classList.add('drag-over');
@@ -480,14 +477,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 handleFiles(e.dataTransfer.files);
             });
             
-            // --- File Input Change Event ---
             fileInput.addEventListener('change', (e) => {
                 handleFiles(e.target.files);
-                // e.target.value = ''; // FIX: Commented out to prevent clearing files
             });
 
             function handleFiles(newFiles) {
-                showError(''); // Clear previous errors
+                showError(''); 
                 let filesAdded = 0;
                 
                 for (let i = 0; i < newFiles.length; i++) {
@@ -502,14 +497,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
                 
-                // CRITICAL FIX: Ensure the actual input has the files for immediate UI/prop checks
                 fileInput.files = fileStore.files; 
                 renderFileList();
             }
 
             function isDuplicate(newFile) {
                 for (let i = 0; i < fileStore.files.length; i++) {
-                    // Check by name AND size to avoid accidental mismatches
                     if (fileStore.files[i].name === newFile.name && fileStore.files[i].size === newFile.size) {
                         return true;
                     }
@@ -518,14 +511,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             function renderFileList() {
-                fileListContainer.innerHTML = ''; // Clear visual list
+                fileListContainer.innerHTML = ''; 
                 
                 if (fileStore.files.length > 0) {
-                    fileInput.required = false; // Programmatically set required to false
-                    addMoreLabel.classList.remove('hidden'); // Show "Add More"
-                    dropZone.classList.add('hidden'); // Hide drop zone
+                    fileInput.required = false; 
+                    addMoreLabel.classList.remove('hidden'); 
+                    dropZone.classList.add('hidden'); 
                 } else {
-                    fileInput.required = true; // Programmatically set required to true (only effective if HTML attribute is missing)
+                    fileInput.required = true; 
                     addMoreLabel.classList.add('hidden');
                     dropZone.classList.remove('hidden');
                 }
@@ -559,7 +552,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     fileListContainer.appendChild(fileItem);
                 }
                 
-                // Add event listeners to all new "remove" buttons
                 document.querySelectorAll('.remove-file-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         removeFile(parseInt(this.dataset.index));
@@ -575,7 +567,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                 }
                 
-                // Replace old master list with new one
                 fileStore.items.clear();
                 for(let i = 0; i < newFileStore.files.length; i++) {
                     fileStore.items.add(newFileStore.files[i]);
@@ -590,28 +581,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 message ? errorMsg.classList.remove('hidden') : errorMsg.classList.add('hidden');
             }
 
-            // --- Form Submission Spinner & Fix ---
             const docForm = document.getElementById('new-doc-form');
             const submitButton = document.getElementById('submit-button');
             
             if (docForm && submitButton) {
                 docForm.addEventListener('submit', function(e) {
                     
-                    // [CRITICAL FIX] Re-populate the input with files from the DataTransfer object
-                    // This is done right before submission to ensure files are included
                     fileInput.files = fileStore.files; 
 
                     const spinner = submitButton.querySelector('svg');
                     const buttonText = submitButton.querySelector('.button-text');
 
-                    // Final check for files
                     if (fileInput.files.length === 0) {
                         e.preventDefault(); 
                         const msg = 'At least one document file is required.';
                         showError(msg);
                         createToast(msg, 'error');
                         
-                        // Reset button state if submission is prevented
                         submitButton.disabled = false;
                         submitButton.classList.remove('opacity-75', 'cursor-not-allowed');
                         if (spinner) spinner.style.display = 'none';
@@ -620,7 +606,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         return;
                     }
                     
-                    // If validation passes, show loading state and disable
                     submitButton.disabled = true;
                     if (spinner) spinner.style.display = 'inline-block';
                     if (buttonText) buttonText.textContent = 'Submitting...';
