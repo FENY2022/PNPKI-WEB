@@ -17,7 +17,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-    header("Location: queue.php");
+    header("Location: my_queue.php");
     exit;
 }
 
@@ -27,7 +27,6 @@ $toasts = [];
 
 // --- 2. AJAX: Fetch Word Content for Editor ---
 if (isset($_GET['action']) && $_GET['action'] == 'fetch_content' && isset($_GET['file_path'])) {
-    // Security: basic check to prevent directory traversal could be added here
     $file_path = $_GET['file_path'];
     
     if (file_exists($file_path)) {
@@ -35,12 +34,11 @@ if (isset($_GET['action']) && $_GET['action'] == 'fetch_content' && isset($_GET[
             $phpWord = IOFactory::load($file_path);
             $htmlWriter = IOFactory::createWriter($phpWord, 'HTML');
             
-            // Capture HTML output
             ob_start();
             $htmlWriter->save('php://output');
             $html_content = ob_get_clean();
             
-            // Extract only the body content to keep the editor clean
+            // Extract body content
             preg_match('/<body[^>]*>(.*?)<\/body>/is', $html_content, $matches);
             $body_content = $matches[1] ?? $html_content;
 
@@ -51,7 +49,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'fetch_content' && isset($_GET[
     } else {
         echo json_encode(['status' => 'error', 'message' => 'File not found on server.']);
     }
-    exit; // Stop execution for AJAX
+    exit; 
 }
 
 // --- 3. Handle Form Submissions ---
@@ -69,26 +67,56 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $conn->begin_transaction();
         try {
             
-            // --- A. Save Online Edits ---
+            // --- A. Save Online Edits (UPDATED FIX) ---
             if (isset($_POST['save_edit_content'])) {
                 $html_input = $_POST['save_edit_content'];
                 
-                // Convert HTML back to DOCX
+                // 1. Basic Cleanup
+                $html_input = str_replace('&nbsp;', ' ', $html_input);
+                
+                // 2. Load into DOMDocument to fix structure
+                $dom = new DOMDocument();
+                // Suppress warnings for HTML parsing
+                libxml_use_internal_errors(true);
+                // Load HTML with UTF-8 encoding wrapper
+                $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html_input, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                libxml_clear_errors();
+
+                // 3. Extract ONLY the inner content of <body>
+                // We do NOT want to pass <html> or <body> tags to PHPWord as they cause corruption
+                $body = $dom->getElementsByTagName('body')->item(0);
+                $clean_html = '';
+                
+                if ($body) {
+                    foreach ($body->childNodes as $child) {
+                        $clean_html .= $dom->saveXML($child);
+                    }
+                } else {
+                    // Fallback if only text/fragments were sent
+                    $clean_html = $dom->saveXML($dom->documentElement);
+                }
+
+                // 4. Generate DOCX
                 $phpWord = new PhpWord();
                 $section = $phpWord->addSection();
-                \PhpOffice\PhpWord\Shared\Html::addHtml($section, $html_input, false, false);
+                
+                try {
+                    \PhpOffice\PhpWord\Shared\Html::addHtml($section, $clean_html, false, false);
+                } catch (Exception $e) {
+                    // Fallback: Save as plain text if HTML parsing fails
+                    $section->addText(strip_tags($html_input));
+                }
 
-                // Save to server
+                // 5. Save to server
                 $new_filename = uniqid('edited_', true) . '.docx';
                 $dest_path = 'uploads/' . $new_filename;
                 
-                // Ensure uploads folder exists
                 if (!is_dir('uploads')) mkdir('uploads', 0755, true);
                 
                 $objWriter = IOFactory::createWriter($phpWord, 'Word2007');
                 $objWriter->save($dest_path);
 
-                // Calculate next version
+                // Update Database
                 $v_sql = "SELECT IFNULL(MAX(version), 0) + 1 FROM document_files WHERE doc_id = ?";
                 $stmt_v = $conn->prepare($v_sql);
                 $stmt_v->bind_param("i", $doc_id);
@@ -97,13 +125,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt_v->fetch();
                 $stmt_v->close();
 
-                // Insert into DB
                 $sql_f = "INSERT INTO document_files (doc_id, uploader_id, filename, filepath, version) VALUES (?, ?, ?, ?, ?)";
                 $stmt_f = $conn->prepare($sql_f);
                 $stmt_f->bind_param("iissi", $doc_id, $user_id, $new_filename, $dest_path, $next_ver);
                 $stmt_f->execute();
 
-                // Log Action
                 $log_msg = "Edited document online (v$next_ver)";
                 $log_sql = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, 'Edited', ?)";
                 $stmt_log = $conn->prepare($log_sql);
@@ -121,7 +147,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $remarks = trim($_POST['remarks']);
                 $next_user_id = isset($_POST['next_user_id']) ? intval($_POST['next_user_id']) : null;
 
-                // Handle Optional File Upload
                 if (isset($_FILES['signed_file']) && $_FILES['signed_file']['error'] === UPLOAD_ERR_OK) {
                     $file_tmp = $_FILES['signed_file']['tmp_name'];
                     $file_name = $_FILES['signed_file']['name'];
@@ -132,7 +157,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     if (!is_dir('uploads')) mkdir('uploads', 0755, true);
                     move_uploaded_file($file_tmp, $dest_path);
 
-                    // Versioning
                     $v_sql = "SELECT IFNULL(MAX(version), 0) + 1 FROM document_files WHERE doc_id = ?";
                     $stmt_v = $conn->prepare($v_sql);
                     $stmt_v->bind_param("i", $doc_id);
@@ -149,7 +173,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $remarks .= " [Uploaded signed file]";
                 }
 
-                // Determine Logic
                 $new_status = "";
                 $log_action = "";
                 $target_owner = $next_user_id;
@@ -157,31 +180,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 if ($action_type === 'Return') {
                     $new_status = "Returned";
                     $log_action = "Returned Document";
-                    $target_owner = $user_id; // Keep with current user to allow re-sending
+                    $target_owner = $user_id; 
                 } elseif ($action_type === 'Finalize') {
                     $new_status = "Completed";
                     $log_action = "Approved & Finalized";
-                    $target_owner = 0; // 0 or NULL for no owner
+                    $target_owner = 0; 
                 } else {
                     $new_status = "Review"; 
                     $log_action = "Forwarded";
                 }
 
-                // Update Document
                 $update_sql = "UPDATE documents SET current_owner_id = ?, status = ?, updated_at = NOW() WHERE doc_id = ?";
                 $stmt_upd = $conn->prepare($update_sql);
                 $stmt_upd->bind_param("isi", $target_owner, $new_status, $doc_id);
                 $stmt_upd->execute();
 
-                // Log Action
                 $log_sql = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, ?, ?)";
                 $stmt_log = $conn->prepare($log_sql);
                 $stmt_log->bind_param("iiss", $doc_id, $user_id, $log_action, $remarks);
                 $stmt_log->execute();
 
                 $conn->commit();
-                
-                // Redirect logic handled by JS toast
                 $toasts[] = ['type' => 'success', 'message' => "Document processed successfully!"];
             }
 
@@ -203,7 +222,6 @@ $doc = $stmt->get_result()->fetch_assoc();
 
 if (!$doc) die("Document not found.");
 
-// Fetch all files (DESC version)
 $sql_files = "SELECT * FROM document_files WHERE doc_id = ? ORDER BY version DESC";
 $stmt_files = $conn->prepare($sql_files);
 $stmt_files->bind_param("i", $doc_id);
@@ -217,14 +235,12 @@ while($f = $files->fetch_assoc()) {
     if (!$latest_file) $latest_file = $f;
 }
 
-// Fetch History
 $sql_hist = "SELECT da.*, u.first_name, u.last_name FROM document_actions da JOIN users u ON da.user_id = u.user_id WHERE da.doc_id = ? ORDER BY da.created_at DESC";
 $stmt_hist = $conn->prepare($sql_hist);
 $stmt_hist->bind_param("i", $doc_id);
 $stmt_hist->execute();
 $history = $stmt_hist->get_result();
 
-// Fetch Potential Signatories
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
     $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE user_id != ?";
@@ -257,7 +273,7 @@ if ($doc['current_owner_id'] == $user_id) {
 <body class="bg-gray-50 p-6">
 
 <div class="max-w-7xl mx-auto mb-6">
-    <a href="queue.php" class="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-2">
+    <a href="my_queue.php" class="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-2">
         <i class="fas fa-arrow-left"></i> Back to Queue
     </a>
 </div>
@@ -295,7 +311,6 @@ if ($doc['current_owner_id'] == $user_id) {
                         <?php 
                             $f_ext = strtolower(pathinfo($file['filename'], PATHINFO_EXTENSION));
                             $is_docx = ($f_ext === 'docx');
-                            // The array is sorted DESC, so index 0 is the latest
                             $is_latest = ($index === 0);
                         ?>
                         <li class="py-3 flex justify-between items-center">
@@ -448,14 +463,12 @@ if ($doc['current_owner_id'] == $user_id) {
 </div>
 
 <script>
-    // --- 1. Toggle UI Logic ---
     function toggleNextUser() {
         const action = document.getElementById('action_type').value;
         const div = document.getElementById('next_user_div');
         div.style.display = (action === 'Finalize' || action === 'Return') ? 'none' : 'block';
     }
 
-    // --- 2. Viewer Logic ---
     function openViewer(filePath, fileName, ext) {
         document.getElementById('viewerModal').classList.remove('hidden');
         const container = document.getElementById('viewerContent');
@@ -470,19 +483,15 @@ if ($doc['current_owner_id'] == $user_id) {
                         .catch(e => container.innerHTML = '<div class="text-red-500">Error rendering DOCX. Please download to view.</div>');
                 });
         } else {
-            // Assume PDF or Image - Browser native
             container.innerHTML = `<iframe src="${filePath}" class="w-full h-full border-0"></iframe>`;
         }
     }
     function closeViewer() { document.getElementById('viewerModal').classList.add('hidden'); }
 
-    // --- 3. Editor Logic ---
     let editorInitialized = false;
-
     function openEditor(filePath) {
         document.getElementById('editorModal').classList.remove('hidden');
         
-        // Initialize TinyMCE on first open
         if (!editorInitialized) {
             tinymce.init({
                 selector: '#tinyEditor',
@@ -491,18 +500,19 @@ if ($doc['current_owner_id'] == $user_id) {
                 menubar: false,
                 plugins: 'lists link image table code preview',
                 toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist outdent indent | table | code',
-                branding: false, // Helps hide branding
-                promotion: false // Helps hide upgrade buttons
+                branding: false, 
+                promotion: false,
+                entity_encoding: "raw", 
+                verify_html: true,
+                valid_children: "+body[style]",
             });
             editorInitialized = true;
         }
 
-        // Set Loading State
         if(tinymce.get('tinyEditor')) {
             tinymce.get('tinyEditor').setContent('<p style="text-align:center; color:#888;">Loading document content from server...</p>');
         }
 
-        // AJAX Fetch Content
         fetch(`?action=fetch_content&id=<?php echo $doc_id; ?>&file_path=${encodeURIComponent(filePath)}`)
             .then(response => response.json())
             .then(data => {
@@ -524,13 +534,11 @@ if ($doc['current_owner_id'] == $user_id) {
         document.getElementById('editorModal').classList.add('hidden');
     }
 
-    // --- 4. Toasts / Redirects ---
     <?php if (!empty($toasts)): foreach($toasts as $t): ?>
         alert("<?php echo $t['message']; ?>");
-        <?php if($t['type'] === 'success') echo "window.location.href='queue.php';"; ?>
+        <?php if($t['type'] === 'success') echo "window.location.href='my_queue.php';"; ?>
     <?php endforeach; endif; ?>
     
-    // Init
     toggleNextUser();
 </script>
 
