@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 06, 2026 at 04:36 AM
+-- Generation Time: Jan 07, 2026 at 02:49 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -188,9 +188,10 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`user_id`, `email`, `password_hash`, `first_name`, `middle_name`, `last_name`, `suffix`, `position`, `designation`, `division`, `sex`, `contact_number`, `role`, `status`, `verification_token`, `token_expiry`, `reset_token`, `reset_token_expiry`, `created_at`, `otos_userlink`, `profile_picture_path`) VALUES
-(3, 'venzonanthonie@gmail.com', '$2y$10$2yFEiICumEZvkyace6AQy.SK1tdlQk6ktHIElkW3pp.uE.YS8Zd8i', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 0, 'uploads/profile_pics/3_d8a0add5e7a4.png'),
+(3, 'venzonanthonie@gmail.com', '$2y$10$2yFEiICumEZvkyace6AQy.SK1tdlQk6ktHIElkW3pp.uE.YS8Zd8i', 'ANTHONIE FENY', 'VENZON', 'CATALAN', '', 'FOREST RANGER', 'COMPUTER PROGRAMMER', 'PLANNING MANAGEMENT', 'Male', '09478984921', 'Admin', 'active', NULL, NULL, NULL, NULL, '2025-11-18 05:07:15', 57, 'uploads/profile_pics/3_d8a0add5e7a4.png'),
 (7, 'yowaf85723@naqulu.com', '$2y$10$rdfGhCcVTMDql9EXMBj3vON3FD2dYNXzS7zh3xbCwFzc2iUwMAfKq', 'MARY KATHLEEN', 'KATHLEEN P.', 'PO', '', 'PLANNING V', 'CHIEF PMD', 'PLANNNING AND MANAGEMENT DIVISION', 'Female', '09329342620', 'Initiator', 'active', 'b30c41b2e656af6a8de8f5e1a9533b525f0360bee1fcd44535f75a7fde955b2c', '2025-12-10 23:57:26', NULL, NULL, '2025-12-10 21:57:26', 56, 'uploads/profile_pics/7_cbd67e9f808b.jpg'),
-(52, 'claudio.nistal.atty@denr.gov.ph', '$2y$10$X2FBRhDUYoj1W7uxCPHEaewstU7CREPtohbk9a1jXszNIo17nDEIu', 'CLAUDIO', NULL, 'NISTAL JR.', NULL, '', NULL, '', NULL, NULL, 'ARD', 'active', NULL, NULL, NULL, NULL, '2025-12-15 00:45:36', 915, NULL);
+(52, 'claudio.nistal.atty@denr.gov.ph', '$2y$10$X2FBRhDUYoj1W7uxCPHEaewstU7CREPtohbk9a1jXszNIo17nDEIu', 'CLAUDIO', NULL, 'NISTAL JR.', NULL, '', NULL, '', NULL, NULL, 'ARD', 'active', NULL, NULL, NULL, NULL, '2025-12-15 00:45:36', 915, NULL),
+(918, 'jayson.dpaloquia@gmail.com', '$2y$10$EIBmBslB.Cpq1eUQ3ICt6etf58eICcWnJk.5D3Z/owMEUVynoDikG', 'JAYSON', 'D', 'PALOQUIA', '', 'Statistician II', 'PPS STAFF', 'PLANNING AND MANAGEMENT DIVISION', 'Male', '09502889240', 'Initiator', 'active', NULL, NULL, NULL, NULL, '2026-01-06 03:49:09', 974, NULL);
 
 --
 -- Indexes for dumped tables
@@ -277,7 +278,7 @@ ALTER TABLE `office_station`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=917;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=919;
 
 --
 -- Constraints for dumped tables
