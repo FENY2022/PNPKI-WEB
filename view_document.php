@@ -18,7 +18,89 @@ $doc_id = intval($_GET['id']);
 $user_id = $_SESSION['user_id'];
 $toasts = [];
 
-// --- 2. Handle Form Submission (Process Document) ---
+// --- 2. Handle Form Submissions ---
+
+// A. Handle "Edit / Update" Submission
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_document'])) {
+    
+    // Verify Owner
+    $check_sql = "SELECT current_owner_id, status FROM documents WHERE doc_id = ?";
+    $stmt_check = $conn->prepare($check_sql);
+    $stmt_check->bind_param("i", $doc_id);
+    $stmt_check->execute();
+    $curr_doc = $stmt_check->get_result()->fetch_assoc();
+
+    if ($curr_doc && $curr_doc['current_owner_id'] == $user_id) {
+        $new_title = trim($_POST['doc_title']);
+        $new_type = trim($_POST['doc_type']);
+        $edit_remarks = "Updated document details/content.";
+
+        $conn->begin_transaction();
+        try {
+            // 1. Update Metadata
+            $upd_sql = "UPDATE documents SET title = ?, doc_type = ?, updated_at = NOW() WHERE doc_id = ?";
+            $stmt_upd = $conn->prepare($upd_sql);
+            $stmt_upd->bind_param("ssi", $new_title, $new_type, $doc_id);
+            $stmt_upd->execute();
+
+            // 2. Handle New Version Upload (if provided)
+            if (isset($_FILES['new_version_file']) && $_FILES['new_version_file']['error'] === UPLOAD_ERR_OK) {
+                $file_tmp = $_FILES['new_version_file']['tmp_name'];
+                $file_name = $_FILES['new_version_file']['name'];
+                $file_size = $_FILES['new_version_file']['size'];
+                
+                $allowed = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+                $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
+                if (in_array($ext, $allowed) && $file_size < 15000000) {
+                    $new_filename = uniqid('v_', true) . '.' . $ext;
+                    $dest_path = 'uploads/' . $new_filename;
+
+                    if (!is_dir('uploads')) mkdir('uploads', 0755, true);
+
+                    if (move_uploaded_file($file_tmp, $dest_path)) {
+                        // Get Next Version Number
+                        $v_sql = "SELECT IFNULL(MAX(version), 0) + 1 FROM document_files WHERE doc_id = ?";
+                        $stmt_v = $conn->prepare($v_sql);
+                        $stmt_v->bind_param("i", $doc_id);
+                        $stmt_v->execute();
+                        $stmt_v->bind_result($next_ver);
+                        $stmt_v->fetch();
+                        $stmt_v->close();
+
+                        // Insert new file record
+                        $sql_f = "INSERT INTO document_files (doc_id, uploader_id, filename, filepath, version) VALUES (?, ?, ?, ?, ?)";
+                        $stmt_f = $conn->prepare($sql_f);
+                        $stmt_f->bind_param("iissi", $doc_id, $user_id, $file_name, $dest_path, $next_ver);
+                        $stmt_f->execute();
+                        
+                        $edit_remarks = "Uploaded new version (v$next_ver): $file_name";
+                    }
+                } else {
+                    throw new Exception("Invalid file type or file too large.");
+                }
+            }
+
+            // 3. Log History
+            $log_sql = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, ?, ?)";
+            $stmt_log = $conn->prepare($log_sql);
+            $action_log = "Edited";
+            $stmt_log->bind_param("iiss", $doc_id, $user_id, $action_log, $edit_remarks);
+            $stmt_log->execute();
+
+            $conn->commit();
+            $toasts[] = ['type' => 'success', 'message' => "Document updated successfully!"];
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            $toasts[] = ['type' => 'error', 'message' => "Update failed: " . $e->getMessage()];
+        }
+    } else {
+        $toasts[] = ['type' => 'error', 'message' => "Permission denied: You are not the owner."];
+    }
+}
+
+// B. Handle Process (Forward/Return/Finalize)
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action_type'])) {
     
     // Verify Owner
@@ -36,25 +118,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action_type'])) {
         
         $conn->begin_transaction();
         try {
-            // --- A. Handle Signed File Upload (If present) ---
+            // Handle Signed File Upload (If present)
             if (isset($_FILES['signed_file']) && $_FILES['signed_file']['error'] === UPLOAD_ERR_OK) {
                 $file_tmp = $_FILES['signed_file']['tmp_name'];
                 $file_name = $_FILES['signed_file']['name'];
                 $file_size = $_FILES['signed_file']['size'];
                 
-                // Basic Validation (PDF, Doc, Images)
                 $allowed = ['pdf', 'doc', 'docx', 'jpg', 'png', 'jpeg'];
                 $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
                 
-                if (in_array($ext, $allowed) && $file_size < 15000000) { // Max 15MB
-                    // Generate unique filename
+                if (in_array($ext, $allowed) && $file_size < 15000000) {
                     $new_filename = uniqid('signed_', true) . '.' . $ext;
                     $dest_path = 'uploads/' . $new_filename;
                     
                     if (!is_dir('uploads')) mkdir('uploads', 0755, true);
 
                     if (move_uploaded_file($file_tmp, $dest_path)) {
-                        // 1. Get Next Version Number
+                        // Get Next Version
                         $v_sql = "SELECT IFNULL(MAX(version), 0) + 1 FROM document_files WHERE doc_id = ?";
                         $stmt_v = $conn->prepare($v_sql);
                         $stmt_v->bind_param("i", $doc_id);
@@ -63,13 +143,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action_type'])) {
                         $stmt_v->fetch();
                         $stmt_v->close();
 
-                        // 2. Insert into document_files
+                        // Insert
                         $sql_f = "INSERT INTO document_files (doc_id, uploader_id, filename, filepath, version) VALUES (?, ?, ?, ?, ?)";
                         $stmt_f = $conn->prepare($sql_f);
                         $stmt_f->bind_param("iissi", $doc_id, $user_id, $file_name, $dest_path, $next_ver);
                         $stmt_f->execute();
                         
-                        // Append to remarks for audit trail
                         $remarks .= " [Uploaded signed version: $file_name]";
                     }
                 } else {
@@ -77,7 +156,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action_type'])) {
                 }
             }
 
-            // --- B. Determine Status & Target ---
+            // Determine Status & Target
             $new_status = "";
             $log_action = "";
             $target_owner = $next_user_id;
@@ -85,25 +164,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action_type'])) {
             if ($action_type === 'Return') {
                 $new_status = "Returned";
                 $log_action = "Returned Document";
-                $target_owner = $user_id; // Keep with current user to allow re-sending
+                $target_owner = $user_id; 
             } elseif ($action_type === 'Finalize') {
                 $new_status = "Completed";
                 $log_action = "Approved & Finalized";
                 $target_owner = 0; 
             } else {
-                // Forward
                 $new_status = "Review"; 
                 $log_action = "Forwarded";
                 if (!$next_user_id) throw new Exception("Please select a valid user to forward to.");
             }
 
-            // --- C. Update Document Status ---
+            // Update Document
             $update_sql = "UPDATE documents SET current_owner_id = ?, status = ?, updated_at = NOW() WHERE doc_id = ?";
             $stmt_upd = $conn->prepare($update_sql);
             $stmt_upd->bind_param("isi", $target_owner, $new_status, $doc_id);
             $stmt_upd->execute();
 
-            // --- D. Log History ---
+            // Log History
             $log_sql = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, ?, ?)";
             $stmt_log = $conn->prepare($log_sql);
             $stmt_log->bind_param("iiss", $doc_id, $user_id, $log_action, $remarks);
@@ -186,16 +264,8 @@ if ($doc['current_owner_id'] == $user_id) {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); 
         body { font-family: 'Inter', sans-serif; }
         
-        /* Modal Styles */
-        #viewerModal {
-            transition: opacity 0.3s ease;
-        }
-        #viewerContent {
-            height: 80vh; /* Fixed height for the viewer area */
-            overflow: auto;
-            background-color: #f3f4f6;
-            border: 1px solid #e5e7eb;
-        }
+        #viewerModal, #editModal { transition: opacity 0.3s ease; }
+        #viewerContent { height: 80vh; overflow: auto; background-color: #f3f4f6; border: 1px solid #e5e7eb; }
     </style>
 </head>
 <body class="bg-gray-50 p-6">
@@ -210,22 +280,23 @@ if ($doc['current_owner_id'] == $user_id) {
     
     <div class="lg:col-span-2 space-y-6">
         
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div class="flex justify-between items-start">
-                <div>
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative">
+            <?php if ($doc['current_owner_id'] == $user_id): ?>
+                <button onclick="openEditModal()" 
+                        class="absolute top-6 right-6 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition">
+                    <i class="fas fa-edit"></i> Edit Document
+                </button>
+            <?php endif; ?>
+
+            <div class="flex justify-between items-start pr-32"> <div>
                     <span class="inline-block px-2 py-1 text-xs font-semibold rounded-md bg-blue-100 text-blue-800 mb-2">
                         <?php echo htmlspecialchars($doc['doc_type']); ?>
                     </span>
                     <h1 class="text-2xl font-bold text-gray-900"><?php echo htmlspecialchars($doc['title']); ?></h1>
                     <p class="text-sm text-gray-500 mt-1">Created on <?php echo date('F j, Y', strtotime($doc['created_at'])); ?></p>
                 </div>
-                <div class="text-right">
-                    <div class="text-sm font-medium text-gray-500">Current Status</div>
-                    <div class="text-lg font-bold <?php echo ($doc['status']=='Completed')?'text-green-600':'text-indigo-600'; ?>">
-                        <?php echo htmlspecialchars($doc['status']); ?>
-                    </div>
-                </div>
             </div>
+            
             <div class="mt-6 pt-6 border-t border-gray-100 flex gap-8">
                 <div>
                     <span class="block text-xs text-gray-400 uppercase tracking-wide">Initiator</span>
@@ -239,11 +310,17 @@ if ($doc['current_owner_id'] == $user_id) {
                         <?php echo $doc['owner_fname'] ? htmlspecialchars($doc['owner_fname'] . ' ' . $doc['owner_lname']) : 'None (Completed)'; ?>
                     </span>
                 </div>
+                <div class="ml-auto">
+                    <div class="text-xs text-gray-400 uppercase tracking-wide text-right">Status</div>
+                    <div class="text-lg font-bold <?php echo ($doc['status']=='Completed')?'text-green-600':'text-indigo-600'; ?>">
+                        <?php echo htmlspecialchars($doc['status']); ?>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 class="text-lg font-bold text-gray-900 mb-4">Attachments</h3>
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Attachments / Versions</h3>
             <?php if ($files->num_rows > 0): ?>
                 <ul class="divide-y divide-gray-100">
                     <?php while($file = $files->fetch_assoc()): ?>
@@ -253,12 +330,14 @@ if ($doc['current_owner_id'] == $user_id) {
                         ?>
                         <li class="py-3 flex justify-between items-center">
                             <div class="flex items-center gap-3">
-                                <i class="fas fa-paperclip text-gray-400"></i>
+                                <div class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-500">
+                                    <i class="fas fa-file-<?php echo ($f_ext == 'pdf' ? 'pdf' : 'word'); ?>"></i>
+                                </div>
                                 <div>
                                     <span class="block text-sm text-gray-700 font-medium"><?php echo htmlspecialchars($file['filename']); ?></span>
                                     <span class="block text-xs text-gray-400">
                                         v<?php echo $file['version']; ?> &bull; 
-                                        <?php echo date('M d, Y', strtotime($file['created_at'])); ?>
+                                        <?php echo date('M d, Y h:i A', strtotime($file['created_at'])); ?>
                                     </span>
                                 </div>
                             </div>
@@ -330,9 +409,9 @@ if ($doc['current_owner_id'] == $user_id) {
 
                     <div class="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
                         <label class="block text-sm font-bold text-gray-800 mb-1">
-                            <i class="fas fa-file-signature text-blue-600 mr-1"></i> Upload Signed Document
+                            <i class="fas fa-file-signature text-blue-600 mr-1"></i> Upload Signed Copy
                         </label>
-                        <p class="text-xs text-gray-500 mb-2">Download the file, sign it digitally, and upload it here.</p>
+                        <p class="text-xs text-gray-500 mb-2">If you signed the document, upload the signed version here.</p>
                         <input type="file" name="signed_file" 
                                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
                     </div>
@@ -356,7 +435,7 @@ if ($doc['current_owner_id'] == $user_id) {
 
                     <button type="submit" onclick="return confirm('Are you sure you want to process this document?');"
                             class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg shadow transition duration-150 ease-in-out flex justify-center items-center gap-2">
-                        <i class="fas fa-check"></i> Submit Decision
+                        <i class="fas fa-paper-plane"></i> Submit Decision
                     </button>
                 </form>
             </div>
@@ -370,44 +449,77 @@ if ($doc['current_owner_id'] == $user_id) {
             </div>
         <?php endif; ?>
     </div>
-
 </div>
 
-<div id="viewerModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+<div id="viewerModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeViewer()"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeViewer()"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
         <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
-            
             <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                    Document Preview
-                </h3>
+                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Document Preview</h3>
                 <button type="button" onclick="closeViewer()" class="text-gray-400 hover:text-gray-500 focus:outline-none">
-                    <span class="sr-only">Close</span>
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-
             <div class="bg-gray-50 p-4" id="viewerContainer">
-                <div id="viewerContent" class="w-full rounded bg-white shadow-inner flex items-center justify-center text-gray-500">
-                    <p>Loading document...</p>
-                </div>
-            </div>
-
-            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button type="button" onclick="closeViewer()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                    Close
-                </button>
+                <div id="viewerContent" class="w-full rounded bg-white shadow-inner flex items-center justify-center text-gray-500"></div>
             </div>
         </div>
     </div>
 </div>
 
+<div id="editModal" class="fixed inset-0 z-50 hidden overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeEditModal()"></div>
+        
+        <div class="inline-block bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
+            <form action="" method="POST" enctype="multipart/form-data">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4 border-b pb-2">
+                        <i class="fas fa-pen-to-square text-indigo-500 mr-2"></i>Edit Document
+                    </h3>
+                    
+                    <input type="hidden" name="update_document" value="1">
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Document Title</label>
+                        <input type="text" name="doc_title" required value="<?php echo htmlspecialchars($doc['title']); ?>" 
+                               class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 border">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
+                        <select name="doc_type" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 border">
+                            <option value="Memorandum" <?php echo $doc['doc_type']=='Memorandum'?'selected':''; ?>>Memorandum</option>
+                            <option value="Travel Order" <?php echo $doc['doc_type']=='Travel Order'?'selected':''; ?>>Travel Order</option>
+                            <option value="Report" <?php echo $doc['doc_type']=='Report'?'selected':''; ?>>Report</option>
+                            <option value="Letter" <?php echo $doc['doc_type']=='Letter'?'selected':''; ?>>Letter</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4 bg-yellow-50 p-3 rounded-md border border-yellow-200">
+                        <label class="block text-sm font-bold text-gray-800 mb-1">Upload New Version (Save Edits)</label>
+                        <p class="text-xs text-gray-600 mb-2">To "save" your edits: Download the file, edit it on your computer, and upload the updated version here.</p>
+                        <input type="file" name="new_version_file" 
+                               class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200">
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                        Save Changes
+                    </button>
+                    <button type="button" onclick="closeEditModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+    // --- Actions Logic ---
     function toggleNextUser() {
         const action = document.getElementById('action_type').value;
         const div = document.getElementById('next_user_div');
@@ -421,52 +533,49 @@ if ($doc['current_owner_id'] == $user_id) {
     // --- Viewer Logic ---
     function openViewer(filePath, fileName, ext) {
         const modal = document.getElementById('viewerModal');
-        const title = document.getElementById('modal-title');
         const container = document.getElementById('viewerContent');
-        
-        // Show Modal
         modal.classList.remove('hidden');
-        title.textContent = "Preview: " + fileName;
         container.innerHTML = '<p class="text-center p-10"><i class="fas fa-spinner fa-spin text-3xl"></i><br>Loading...</p>';
 
         if (ext === 'pdf') {
-            // Native Browser PDF Viewer
             container.innerHTML = `<iframe src="${filePath}" class="w-full h-full" frameborder="0"></iframe>`;
         } else if (ext === 'docx') {
-            // Render DOCX using library
             fetch(filePath)
                 .then(response => response.blob())
                 .then(blob => {
-                    container.innerHTML = ''; // Clear loading
-                    // docx-preview rendering
+                    container.innerHTML = ''; 
                     docx.renderAsync(blob, container, null, {
-                        inWrapper: false, 
-                        ignoreWidth: false, 
-                        experimental: true 
+                        inWrapper: false, ignoreWidth: false, experimental: true 
                     }).then(x => console.log("docx: finished"));
                 })
                 .catch(err => {
-                    console.error(err);
-                    container.innerHTML = '<div class="text-center p-10 text-red-500">Error loading document.<br>Please download to view.</div>';
+                    container.innerHTML = '<div class="text-center p-10 text-red-500">Error loading document.</div>';
                 });
         }
     }
 
     function closeViewer() {
-        const modal = document.getElementById('viewerModal');
-        const container = document.getElementById('viewerContent');
-        modal.classList.add('hidden');
-        container.innerHTML = ''; // Clear memory/content
+        document.getElementById('viewerModal').classList.add('hidden');
+        document.getElementById('viewerContent').innerHTML = '';
     }
 
+    // --- Edit Modal Logic ---
+    function openEditModal() {
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+    function closeEditModal() {
+        document.getElementById('editModal').classList.add('hidden');
+    }
+
+    // --- Initialize ---
     document.addEventListener("DOMContentLoaded", function() {
         toggleNextUser();
-        
         <?php if (!empty($toasts)): ?>
             <?php foreach($toasts as $t): ?>
                 alert("<?php echo $t['message']; ?>"); 
                 <?php if ($t['type'] === 'success'): ?>
-                    window.location.href = 'my_queue.php';
+                    // Optional: remove redirect if you want them to stay on page to see changes
+                     window.location.href = window.location.href;
                 <?php endif; ?>
             <?php endforeach; ?>
         <?php endif; ?>
