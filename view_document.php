@@ -247,14 +247,11 @@ if ($doc['current_owner_id'] == $user_id) {
     <script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
     <script src="https://unpkg.com/docx-preview/dist/docx-preview.min.js"></script>
     
-    <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    <script src="https://cdn.tiny.cloud/1/nhgr79jw7mch6vkui23a189kenqp8v0bc6e9akjt5gmickj9/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); 
         body { font-family: 'Inter', sans-serif; }
-        
-        /* HACK: Hides the "API Key Required" warning banner from TinyMCE */
-        .tox-notifications-container { display: none !important; }
     </style>
 </head>
 <body class="bg-gray-50 p-6">
