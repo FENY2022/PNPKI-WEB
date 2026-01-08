@@ -136,7 +136,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $conn->begin_transaction();
         try {
             // Step 1: Insert into `documents` table
-            // MODIFIED: Uses $submission_status variable instead of hardcoded 'Draft'
             $sql_doc = "INSERT INTO documents (title, doc_type, initiator_id, current_owner_id, status) 
                         VALUES (?, ?, ?, ?, ?)";
             $stmt_doc = $conn->prepare($sql_doc);
@@ -149,7 +148,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Step 2: Insert into `document_files` table
             $version = 1; 
             $sql_file = "INSERT INTO document_files (doc_id, uploader_id, filename, filepath, version) 
-                         VALUES (?, ?, ?, ?, ?)";
+                          VALUES (?, ?, ?, ?, ?)";
             $stmt_file = $conn->prepare($sql_file);
             
             foreach ($uploaded_files as $file) {
@@ -288,9 +287,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <?php if (!empty($errors)): ?>
             <script>
-                <?php foreach ($errors as $e): ?>
-                    console.error("Server-side Error:", <?php echo json_encode($e); ?>);
-                <?php endforeach; ?>
+                // Transfer PHP array to JS variable
+                const serverErrors = <?php echo json_encode($errors); ?>;
+                
+                if (serverErrors && serverErrors.length > 0) {
+                    // Create a styled group in the console
+                    console.group("%c ⚠️ Server-Side Validation Errors ", "background: #DC2626; color: white; font-size: 12px; padding: 4px; border-radius: 4px;");
+                    
+                    serverErrors.forEach((err, index) => {
+                        console.error(`Error ${index + 1}:`, err);
+                    });
+                    
+                    console.groupEnd();
+                }
             </script>
             <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-lg" role="alert">
                 <p class="font-bold">Errors Found:</p>
@@ -400,7 +409,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </div>
             </div>
 
-        </div> </form>
+        </div> 
+    </form>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
