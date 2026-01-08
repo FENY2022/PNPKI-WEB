@@ -342,7 +342,13 @@ if ($conn instanceof mysqli && !empty($conn->thread_id)) {
                         <i class="fas fa-edit w-5 h-5 text-indigo-500 group-hover:text-indigo-600"></i>
                         <span>My Drafts</span>
                     </a>
+
+                    <a href="my_submitted_documents.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-file-alt w-5 h-5 text-indigo-500 group-hover:text-indigo-600"></i>
+                        <span>My Submitted Documents</span>
+                    </a>
                 <?php endif; ?>
+                
 
                 <?php if (in_array($role, ['Section Chief', 'Division Chief'])): ?>
                     <a href="returned_docs.php" target="content_frame" class="sidebar-link group flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
