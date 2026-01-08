@@ -21,14 +21,17 @@ if ($_SESSION['role'] != 'Initiator' && $_SESSION['role'] != 'Admin') {
 $initiator_id = $_SESSION['user_id'];
 
 // --- 2. Get Section Chiefs for the dropdown ---
-// (RESTORED TO ORIGINAL: Shows all signatories even if they don't have a user account yet)
 try {
     if (isset($_SESSION['signatory_station'])) {
         $station_filter = $_SESSION['signatory_station'];
         
-        $sql = "SELECT DISTINCT ds.user_id, ds.full_name 
+        // --- FIX APPLIED HERE ---
+        // We now JOIN 'users' by matching 'ds.user_id' (Signatory ID) to 'u.otos_userlink'.
+        // We select 'u.user_id' (The REAL ID) to put in the value attribute, ensuring the Foreign Key works.
+        $sql = "SELECT DISTINCT u.user_id, ds.full_name 
                 FROM document_signatories ds
                 INNER JOIN office_station os ON ds.batch_id = os.id
+                INNER JOIN users u ON ds.user_id = u.otos_userlink
                 WHERE os.station = ?";
                 
         $stmt = $conn->prepare($sql);
@@ -65,15 +68,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($doc_type)) $errors[] = "Document Type is required.";
     if (empty($section_chief_id)) $errors[] = "You must select a Section Chief to route to.";
     
-    // --- NEW SAFETY CHECK --- 
-    // This prevents the "Foreign Key Constraint" crash if the selected chief doesn't exist in the users table.
+    // --- SAFETY CHECK --- 
+    // This verifies the ID selected is a valid User ID before inserting
     if (!empty($section_chief_id)) {
         $check_user = $conn->prepare("SELECT user_id FROM users WHERE user_id = ?");
         $check_user->bind_param("i", $section_chief_id);
         $check_user->execute();
         $check_user->store_result();
         if ($check_user->num_rows === 0) {
-            $errors[] = "Error: The selected Section Chief (ID: $section_chief_id) does not have a valid account in the Users database. Please contact an admin.";
+            $errors[] = "Error: The selected Chief (User ID: $section_chief_id) does not have a valid account. Please contact admin to check OTOS Userlink.";
         }
         $check_user->close();
     }
@@ -358,7 +361,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             </option>
                         <?php endforeach; ?>
                         <?php if (empty($section_chiefs)): ?>
-                            <option value="" disabled>No signatories found for your station.</option>
+                            <option value="" disabled>No signatories found. (Check OTOS Link)</option>
                         <?php endif; ?>
                     </select>
                 </div>

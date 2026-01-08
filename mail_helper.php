@@ -22,7 +22,9 @@
 function _send_email_via_service($to_email, $subject, $message_body, $sender_name = 'DDTMS Support') {
     
     // The external email service URL you provided
-    $emailUrl = 'https://ict-amsos.e-dats.info/sendemail/send.php';
+    // $emailUrl = 'https://ict-amsos.e-dats.info/sendemail/send.php';
+    $emailUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/sendemail/send.php';
+
 
     // Build the query parameters for the GET request
     $queryParams = http_build_query([
