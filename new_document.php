@@ -21,6 +21,7 @@ if ($_SESSION['role'] != 'Initiator' && $_SESSION['role'] != 'Admin') {
 $initiator_id = $_SESSION['user_id'];
 
 // --- 2. Get Section Chiefs for the dropdown ---
+// (RESTORED TO ORIGINAL: Shows all signatories even if they don't have a user account yet)
 try {
     if (isset($_SESSION['signatory_station'])) {
         $station_filter = $_SESSION['signatory_station'];
@@ -56,7 +57,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $section_chief_id = trim($_POST['section_chief_id']);
     $message = trim($_POST['message']);
     
-    // NEW: Capture Submission Status
+    // Capture Submission Status
     $submission_status = isset($_POST['submission_status']) ? trim($_POST['submission_status']) : 'Draft';
 
     // Pre-submission validation
@@ -64,6 +65,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($doc_type)) $errors[] = "Document Type is required.";
     if (empty($section_chief_id)) $errors[] = "You must select a Section Chief to route to.";
     
+    // --- NEW SAFETY CHECK --- 
+    // This prevents the "Foreign Key Constraint" crash if the selected chief doesn't exist in the users table.
+    if (!empty($section_chief_id)) {
+        $check_user = $conn->prepare("SELECT user_id FROM users WHERE user_id = ?");
+        $check_user->bind_param("i", $section_chief_id);
+        $check_user->execute();
+        $check_user->store_result();
+        if ($check_user->num_rows === 0) {
+            $errors[] = "Error: The selected Section Chief (ID: $section_chief_id) does not have a valid account in the Users database. Please contact an admin.";
+        }
+        $check_user->close();
+    }
+    // -------------------------
+
     // Validate Status (Security check)
     if (!in_array($submission_status, ['Draft', 'Final'])) {
         $submission_status = 'Draft'; // Fallback
@@ -287,17 +302,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <?php if (!empty($errors)): ?>
             <script>
-                // Transfer PHP array to JS variable
                 const serverErrors = <?php echo json_encode($errors); ?>;
                 
                 if (serverErrors && serverErrors.length > 0) {
-                    // Create a styled group in the console
                     console.group("%c ⚠️ Server-Side Validation Errors ", "background: #DC2626; color: white; font-size: 12px; padding: 4px; border-radius: 4px;");
-                    
                     serverErrors.forEach((err, index) => {
                         console.error(`Error ${index + 1}:`, err);
                     });
-                    
                     console.groupEnd();
                 }
             </script>
