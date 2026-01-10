@@ -13,11 +13,8 @@ $user_id = $_SESSION['user_id'];
 // --- START: VIEW DOCUMENT LOGIC ---
 $view_data = null;
 $view_files = [];
-
 if (isset($_GET['view_id'])) {
     $v_id = intval($_GET['view_id']);
-    
-    // Fetch document details (Ensuring ownership)
     $v_query = "SELECT * FROM documents WHERE doc_id = ? AND initiator_id = ?";
     $v_stmt = $conn->prepare($v_query);
     $v_stmt->bind_param("ii", $v_id, $user_id);
@@ -25,7 +22,6 @@ if (isset($_GET['view_id'])) {
     $view_data = $v_stmt->get_result()->fetch_assoc();
 
     if ($view_data) {
-        // Fetch associated files
         $f_query = "SELECT * FROM document_files WHERE doc_id = ?";
         $f_stmt = $conn->prepare($f_query);
         $f_stmt->bind_param("i", $v_id);
@@ -33,7 +29,33 @@ if (isset($_GET['view_id'])) {
         $view_files = $f_stmt->get_result();
     }
 }
-// --- END: VIEW DOCUMENT LOGIC ---
+
+// --- START: TRACK DOCUMENT LOGIC ---
+$track_data = null;
+$track_history = [];
+if (isset($_GET['track_id'])) {
+    $t_id = intval($_GET['track_id']);
+    
+    // Check ownership/access
+    $t_doc_query = "SELECT title, status FROM documents WHERE doc_id = ? AND initiator_id = ?";
+    $t_doc_stmt = $conn->prepare($t_doc_query);
+    $t_doc_stmt->bind_param("ii", $t_id, $user_id);
+    $t_doc_stmt->execute();
+    $track_data = $t_doc_stmt->get_result()->fetch_assoc();
+
+    if ($track_data) {
+        // Fetch action history with concatenated full name
+        $h_query = "SELECT da.*, CONCAT(u.firstname, ' ', u.lastname) AS full_name 
+                    FROM document_actions da 
+                    JOIN users u ON da.user_id = u.user_id 
+                    WHERE da.doc_id = ? 
+                    ORDER BY da.created_at DESC";
+        $h_stmt = $conn->prepare($h_query);
+        $h_stmt->bind_param("i", $t_id);
+        $h_stmt->execute();
+        $track_history = $h_stmt->get_result();
+    }
+}
 
 // 2. Fetch All Documents for the Table
 $query = "SELECT * FROM documents WHERE initiator_id = ? ORDER BY created_at DESC";
@@ -71,55 +93,39 @@ $result = $stmt->get_result();
 
             <main class="w-full flex-grow p-6">
                 <div class="bg-white shadow rounded-lg overflow-hidden">
-                    
                     <?php if ($result->num_rows > 0): ?>
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">#</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10">#</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Submitted</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     <?php 
-                                    $count = 1; // Initializing row counter
+                                    $count = 1;
                                     while ($row = $result->fetch_assoc()): 
                                     ?>
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <?php echo $count++; ?>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($row['title']); ?></div>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="text-sm text-gray-500"><?php echo htmlspecialchars($row['doc_type']); ?></div>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <?php 
-                                                $status = $row['status'];
-                                                $badgeClass = "bg-gray-100 text-gray-800";
-                                                if ($status == 'Completed') $badgeClass = "bg-green-100 text-green-800";
-                                                elseif ($status == 'Review' || $status == 'Signing') $badgeClass = "bg-blue-100 text-blue-800";
-                                                elseif ($status == 'Returned') $badgeClass = "bg-red-100 text-red-800";
-                                                ?>
-                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $badgeClass; ?>">
-                                                    <?php echo $status; ?>
+                                            <td class="px-6 py-4 text-sm text-gray-500"><?php echo $count++; ?></td>
+                                            <td class="px-6 py-4 font-medium text-gray-900"><?php echo htmlspecialchars($row['title']); ?></td>
+                                            <td class="px-6 py-4 text-sm text-gray-500"><?php echo htmlspecialchars($row['doc_type']); ?></td>
+                                            <td class="px-6 py-4">
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                    <?php echo $row['status']; ?>
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <?php echo date('M d, Y', strtotime($row['created_at'])); ?>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <a href="?view_id=<?php echo $row['doc_id']; ?>" class="text-blue-600 hover:text-blue-900 mr-4" title="View Details">
+                                            <td class="px-6 py-4 text-sm text-gray-500"><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
+                                            <td class="px-6 py-4 text-sm font-medium">
+                                                <a href="?view_id=<?php echo $row['doc_id']; ?>" class="text-blue-600 hover:text-blue-900 mr-3">
                                                     <i class="fas fa-eye"></i> View
                                                 </a>
-                                                <a href="track_document.php?id=<?php echo $row['doc_id']; ?>" class="text-indigo-600 hover:text-indigo-900" title="Track History">
+                                                <a href="?track_id=<?php echo $row['doc_id']; ?>" class="text-indigo-600 hover:text-indigo-900">
                                                     <i class="fas fa-history"></i> Track
                                                 </a>
                                             </td>
@@ -129,14 +135,8 @@ $result = $stmt->get_result();
                             </table>
                         </div>
                     <?php else: ?>
-                        <div class="p-6 text-center text-gray-500">
-                            <p class="text-xl">No submitted documents found.</p>
-                            <a href="new_document.php" class="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-                                <i class="fas fa-plus mr-1"></i> Create New Document
-                            </a>
-                        </div>
+                        <div class="p-6 text-center text-gray-500">No documents found.</div>
                     <?php endif; ?>
-
                 </div>
             </main>
         </div>
@@ -144,56 +144,71 @@ $result = $stmt->get_result();
 
     <?php if ($view_data): ?>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-bg">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
-            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                <h3 class="text-xl font-bold text-gray-800">Document Details</h3>
-                <a href="my_submitted_documents.php" class="text-gray-400 hover:text-gray-600">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+            <div class="px-6 py-4 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold">Document Details</h3>
+                <a href="my_submitted_documents.php"><i class="fas fa-times"></i></a>
+            </div>
+            <div class="p-6 space-y-4">
+                <p><strong>Title:</strong> <?php echo htmlspecialchars($view_data['title']); ?></p>
+                <p><strong>Type:</strong> <?php echo htmlspecialchars($view_data['doc_type']); ?></p>
+                <div class="border-t pt-4">
+                    <p class="font-bold mb-2">Files:</p>
+                    <?php while ($f = $view_files->fetch_assoc()): ?>
+                        <div class="flex justify-between py-1 text-sm">
+                            <span><?php echo htmlspecialchars($f['file_name']); ?></span>
+                            <a href="<?php echo $f['file_path']; ?>" target="_blank" class="text-blue-600 underline">Download</a>
+                        </div>
+                    <?php endwhile; ?>
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 text-right rounded-b-lg">
+                <a href="my_submitted_documents.php" class="px-4 py-2 bg-gray-300 rounded text-sm">Close</a>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($track_data): ?>
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-bg">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-indigo-600 text-white rounded-t-lg">
+                <h3 class="text-lg font-bold">Tracking: <?php echo htmlspecialchars($track_data['title']); ?></h3>
+                <a href="my_submitted_documents.php" class="text-white hover:text-gray-200">
                     <i class="fas fa-times text-xl"></i>
                 </a>
             </div>
-            <div class="p-6 space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">Title</p>
-                        <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($view_data['title']); ?></p>
+            <div class="p-6 max-h-[70vh] overflow-y-auto">
+                <?php if ($track_history->num_rows > 0): ?>
+                    <div class="relative border-l-2 border-indigo-200 ml-3 space-y-8">
+                        <?php while ($h = $track_history->fetch_assoc()): ?>
+                            <div class="relative pl-8">
+                                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white"></div>
+                                
+                                <div class="bg-gray-50 p-3 rounded shadow-sm border border-gray-100">
+                                    <div class="flex justify-between items-start mb-1">
+                                        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">
+                                            <?php echo htmlspecialchars($h['action']); ?>
+                                        </span>
+                                        <span class="text-[10px] text-gray-400">
+                                            <?php echo date('M d, Y h:i A', strtotime($h['created_at'])); ?>
+                                        </span>
+                                    </div>
+                                    <p class="text-sm font-semibold text-gray-800"><?php echo htmlspecialchars($h['full_name']); ?></p>
+                                    <?php if (!empty($h['remarks'])): ?>
+                                        <p class="text-xs text-gray-600 mt-2 italic">"<?php echo htmlspecialchars($h['remarks']); ?>"</p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endwhile; ?>
                     </div>
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">Document Type</p>
-                        <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($view_data['doc_type']); ?></p>
-                    </div>
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">Current Status</p>
-                        <p class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($view_data['status']); ?></p>
-                    </div>
-                    <div>
-                        <p class="text-xs font-semibold text-gray-500 uppercase">Date Submitted</p>
-                        <p class="text-sm font-medium text-gray-900"><?php echo date('F d, Y h:i A', strtotime($view_data['created_at'])); ?></p>
-                    </div>
-                </div>
-
-                <div class="border-t pt-4">
-                    <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Attached Files</p>
-                    <ul class="divide-y divide-gray-100 border rounded-md">
-                        <?php if ($view_files && $view_files->num_rows > 0): ?>
-                            <?php while ($file = $view_files->fetch_assoc()): ?>
-                                <li class="p-3 flex justify-between items-center">
-                                    <span class="text-sm text-gray-700">
-                                        <i class="fas fa-file-pdf text-red-500 mr-2"></i> <?php echo htmlspecialchars($file['file_name']); ?>
-                                    </span>
-                                    <a href="<?php echo htmlspecialchars($file['file_path']); ?>" target="_blank" class="text-blue-600 text-sm font-medium hover:underline">
-                                        Download
-                                    </a>
-                                </li>
-                            <?php endwhile; ?>
-                        <?php else: ?>
-                            <li class="p-3 text-sm text-gray-500 italic">No files attached to this document.</li>
-                        <?php endif; ?>
-                    </ul>
-                </div>
+                <?php else: ?>
+                    <p class="text-center text-gray-500 italic">No tracking history found for this document.</p>
+                <?php endif; ?>
             </div>
-            <div class="px-6 py-4 bg-gray-50 border-t text-right">
-                <a href="my_submitted_documents.php" class="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition text-sm font-semibold">
-                    Close
+            <div class="p-4 bg-gray-50 border-t text-right rounded-b-lg">
+                <a href="my_submitted_documents.php" class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 transition">
+                    Done
                 </a>
             </div>
         </div>
