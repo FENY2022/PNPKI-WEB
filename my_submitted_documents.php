@@ -44,8 +44,8 @@ if (isset($_GET['track_id'])) {
     $track_data = $t_doc_stmt->get_result()->fetch_assoc();
 
     if ($track_data) {
-        // Fetch action history with concatenated full name
-        $h_query = "SELECT da.*, CONCAT(u.firstname, ' ', u.lastname) AS full_name 
+        // Fetch action history joined with user names
+        $h_query = "SELECT da.*, u.full_name 
                     FROM document_actions da 
                     JOIN users u ON da.user_id = u.user_id 
                     WHERE da.doc_id = ? 
