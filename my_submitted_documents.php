@@ -45,7 +45,7 @@ if (isset($_GET['track_id'])) {
 
     if ($track_data) {
         // Fetch action history joined with user names
-        $h_query = "SELECT da.*, u.full_name 
+        $h_query = "SELECT da.*, CONCAT(u.first_name, ' ', COALESCE(u.middle_name, ''), ' ', u.last_name) AS full_name 
                     FROM document_actions da 
                     JOIN users u ON da.user_id = u.user_id 
                     WHERE da.doc_id = ? 
@@ -156,8 +156,8 @@ $result = $stmt->get_result();
                     <p class="font-bold mb-2">Files:</p>
                     <?php while ($f = $view_files->fetch_assoc()): ?>
                         <div class="flex justify-between py-1 text-sm">
-                            <span><?php echo htmlspecialchars($f['file_name']); ?></span>
-                            <a href="<?php echo $f['file_path']; ?>" target="_blank" class="text-blue-600 underline">Download</a>
+                            <span><?php echo htmlspecialchars($f['filename']); ?></span>
+                            <a href="<?php echo $f['filepath']; ?>" target="_blank" class="text-blue-600 underline">Download</a>
                         </div>
                     <?php endwhile; ?>
                 </div>
