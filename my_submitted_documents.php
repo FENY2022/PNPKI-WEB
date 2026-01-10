@@ -107,26 +107,46 @@ $result = $stmt->get_result();
                                     <?php 
                                     $count = 1;
                                     while ($row = $result->fetch_assoc()): 
+                                        // LOGIC FOR COLOR CODING
+                                        $status = strtolower($row['status']);
+                                        $statusClasses = '';
+                                        $icon = 'fa-circle';
+
+                                        switch ($status) {
+                                            case 'pending':
+                                                $statusClasses = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                                                break;
+                                            case 'approved':
+                                            case 'completed':
+                                            case 'signed':
+                                                $statusClasses = 'bg-green-100 text-green-800 border-green-200';
+                                                $icon = 'fa-check-circle';
+                                                break;
+                                            case 'rejected':
+                                            case 'denied':
+                                            case 'returned':
+                                                $statusClasses = 'bg-red-100 text-red-800 border-red-200';
+                                                $icon = 'fa-times-circle';
+                                                break;
+                                            case 'forwarded':
+                                            case 'received':
+                                            case 'in transit':
+                                                $statusClasses = 'bg-blue-100 text-blue-800 border-blue-200';
+                                                $icon = 'fa-arrow-right';
+                                                break;
+                                            default:
+                                                $statusClasses = 'bg-gray-100 text-gray-800 border-gray-200';
+                                                break;
+                                        }
                                     ?>
                                         <tr>
                                             <td class="px-6 py-4 text-sm text-gray-500"><?php echo $count++; ?></td>
                                             <td class="px-6 py-4 font-medium text-gray-900"><?php echo htmlspecialchars($row['title']); ?></td>
                                             <td class="px-6 py-4 text-sm text-gray-500"><?php echo htmlspecialchars($row['doc_type']); ?></td>
                                             <td class="px-6 py-4">
-                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                                    <?php 
-                                                    $status = strtolower($row['status']);
-                                                    if ($status === 'pending') {
-                                                        echo 'bg-yellow-100 text-yellow-800';
-                                                    } elseif ($status === 'approved') {
-                                                        echo 'bg-green-100 text-green-800';
-                                                    } elseif ($status === 'rejected') {
-                                                        echo 'bg-red-100 text-red-800';
-                                                    } else {
-                                                        echo 'bg-blue-100 text-blue-800';
-                                                    }
-                                                    ?>">
-                                                    <?php echo htmlspecialchars($row['status']); ?>
+                                                <span class="px-3 py-1 inline-flex text-[10px] leading-5 font-bold rounded-full border shadow-sm <?php echo $statusClasses; ?>">
+                                                    <i class="fas <?php echo $icon; ?> mr-1.5 self-center"></i>
+                                                    <?php echo strtoupper(htmlspecialchars($row['status'])); ?>
                                                 </span>
                                             </td>
                                             <td class="px-6 py-4 text-sm text-gray-500"><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
@@ -155,24 +175,43 @@ $result = $stmt->get_result();
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-bg">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
             <div class="px-6 py-4 border-b flex justify-between items-center">
-                <h3 class="text-xl font-bold">Document Details</h3>
-                <a href="my_submitted_documents.php"><i class="fas fa-times"></i></a>
+                <h3 class="text-xl font-bold text-gray-800">Document Details</h3>
+                <a href="my_submitted_documents.php" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </a>
             </div>
             <div class="p-6 space-y-4">
-                <p><strong>Title:</strong> <?php echo htmlspecialchars($view_data['title']); ?></p>
-                <p><strong>Type:</strong> <?php echo htmlspecialchars($view_data['doc_type']); ?></p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-bold">Title</p>
+                        <p class="text-gray-900"><?php echo htmlspecialchars($view_data['title']); ?></p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-bold">Type</p>
+                        <p class="text-gray-900"><?php echo htmlspecialchars($view_data['doc_type']); ?></p>
+                    </div>
+                </div>
                 <div class="border-t pt-4">
-                    <p class="font-bold mb-2">Files:</p>
-                    <?php while ($f = $view_files->fetch_assoc()): ?>
-                        <div class="flex justify-between py-1 text-sm">
-                            <span><?php echo htmlspecialchars($f['filename']); ?></span>
-                            <a href="<?php echo $f['filepath']; ?>" target="_blank" class="text-blue-600 underline">Download</a>
-                        </div>
-                    <?php endwhile; ?>
+                    <p class="text-xs text-gray-500 uppercase font-bold mb-3">Attached Files</p>
+                    <div class="space-y-2">
+                        <?php while ($f = $view_files->fetch_assoc()): ?>
+                            <div class="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-100">
+                                <span class="text-sm text-gray-700 font-medium">
+                                    <i class="far fa-file-alt mr-2 text-indigo-500"></i>
+                                    <?php echo htmlspecialchars($f['filename']); ?>
+                                </span>
+                                <a href="<?php echo $f['filepath']; ?>" target="_blank" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold bg-white px-3 py-1 rounded shadow-sm border border-gray-200 transition">
+                                    <i class="fas fa-download mr-1"></i> Download
+                                </a>
+                            </div>
+                        <?php endwhile; ?>
+                    </div>
                 </div>
             </div>
             <div class="p-4 bg-gray-50 text-right rounded-b-lg">
-                <a href="my_submitted_documents.php" class="px-4 py-2 bg-gray-300 rounded text-sm">Close</a>
+                <a href="my_submitted_documents.php" class="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-sm font-bold transition">
+                    Close
+                </a>
             </div>
         </div>
     </div>
@@ -187,36 +226,44 @@ $result = $stmt->get_result();
                     <i class="fas fa-times text-xl"></i>
                 </a>
             </div>
-            <div class="p-6 max-h-[70vh] overflow-y-auto">
+            <div class="p-6 max-h-[70vh] overflow-y-auto bg-gray-50">
                 <?php if ($track_history->num_rows > 0): ?>
                     <div class="relative border-l-2 border-indigo-200 ml-3 space-y-8">
                         <?php while ($h = $track_history->fetch_assoc()): ?>
                             <div class="relative pl-8">
-                                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white"></div>
+                                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-indigo-500 border-2 border-white shadow-sm"></div>
                                 
-                                <div class="bg-gray-50 p-3 rounded shadow-sm border border-gray-100">
-                                    <div class="flex justify-between items-start mb-1">
-                                        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">
+                                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
                                             <?php echo htmlspecialchars($h['action']); ?>
                                         </span>
-                                        <span class="text-[10px] text-gray-400">
+                                        <span class="text-[10px] text-gray-400 font-medium">
                                             <?php echo date('M d, Y h:i A', strtotime($h['created_at'])); ?>
                                         </span>
                                     </div>
-                                    <p class="text-sm font-semibold text-gray-800"><?php echo htmlspecialchars($h['full_name']); ?></p>
+                                    <p class="text-sm font-bold text-gray-800 mb-1">
+                                        <i class="fas fa-user-circle text-gray-400 mr-1"></i>
+                                        <?php echo htmlspecialchars($h['full_name']); ?>
+                                    </p>
                                     <?php if (!empty($h['remarks'])): ?>
-                                        <p class="text-xs text-gray-600 mt-2 italic">"<?php echo htmlspecialchars($h['remarks']); ?>"</p>
+                                        <div class="mt-2 p-2 bg-amber-50 border-l-4 border-amber-200 rounded text-[11px] text-amber-900 italic">
+                                            "<?php echo htmlspecialchars($h['remarks']); ?>"
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
                         <?php endwhile; ?>
                     </div>
                 <?php else: ?>
-                    <p class="text-center text-gray-500 italic">No tracking history found for this document.</p>
+                    <div class="py-10 text-center">
+                        <i class="fas fa-search-location text-gray-300 text-4xl mb-3"></i>
+                        <p class="text-gray-500 italic">No tracking history found for this document.</p>
+                    </div>
                 <?php endif; ?>
             </div>
             <div class="p-4 bg-gray-50 border-t text-right rounded-b-lg">
-                <a href="my_submitted_documents.php" class="inline-block px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 transition">
+                <a href="my_submitted_documents.php" class="inline-block px-6 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 transition shadow-md">
                     Done
                 </a>
             </div>
