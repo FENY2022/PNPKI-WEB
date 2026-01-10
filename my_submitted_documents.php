@@ -1,44 +1,4 @@
-<?php
-session_start();
 
-// --- 1. Security Check ---
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
-
-// --- 2. Database Connection ---
-require_once 'db.php'; // Ensure db.php is in the same directory
-
-$user_id = $_SESSION['user_id'];
-
-// --- 3. Fetch Submitted Documents ---
-// We fetch documents where the user is the initiator and status is NOT 'Draft'
-// We also JOIN with the users table to get the name of the 'current_owner'
-$sql = "SELECT 
-            d.doc_id, 
-            d.title, 
-            d.doc_type, 
-            d.status, 
-            d.created_at, 
-            d.updated_at,
-            u.firstname AS owner_firstname, 
-            u.lastname AS owner_lastname
-        FROM documents d
-        LEFT JOIN users u ON d.current_owner_id = u.user_id
-        WHERE d.initiator_id = ? 
-          AND d.status != 'Draft'
-        ORDER BY d.updated_at DESC";
-
-$stmt = $conn->prepare($sql);
-if ($stmt) {
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-} else {
-    die("Error preparing query: " . $conn->error);
-}
-?>
 
 <!DOCTYPE html>
 <html lang="en">
