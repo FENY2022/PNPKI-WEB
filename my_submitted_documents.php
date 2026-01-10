@@ -85,9 +85,6 @@ $result = $stmt->get_result();
             <header class="bg-white shadow-sm sticky top-0 z-30">
                 <div class="px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                     <h1 class="text-2xl font-bold text-gray-800">My Submitted Documents</h1>
-                    <a href="dashboard.php" class="text-blue-600 hover:text-blue-800">
-                        <i class="fas fa-arrow-left"></i> Back to Dashboard
-                    </a>
                 </div>
             </header>
 
@@ -116,8 +113,20 @@ $result = $stmt->get_result();
                                             <td class="px-6 py-4 font-medium text-gray-900"><?php echo htmlspecialchars($row['title']); ?></td>
                                             <td class="px-6 py-4 text-sm text-gray-500"><?php echo htmlspecialchars($row['doc_type']); ?></td>
                                             <td class="px-6 py-4">
-                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                                    <?php echo $row['status']; ?>
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                                    <?php 
+                                                    $status = strtolower($row['status']);
+                                                    if ($status === 'pending') {
+                                                        echo 'bg-yellow-100 text-yellow-800';
+                                                    } elseif ($status === 'approved') {
+                                                        echo 'bg-green-100 text-green-800';
+                                                    } elseif ($status === 'rejected') {
+                                                        echo 'bg-red-100 text-red-800';
+                                                    } else {
+                                                        echo 'bg-blue-100 text-blue-800';
+                                                    }
+                                                    ?>">
+                                                    <?php echo htmlspecialchars($row['status']); ?>
                                                 </span>
                                             </td>
                                             <td class="px-6 py-4 text-sm text-gray-500"><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
