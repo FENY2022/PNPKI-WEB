@@ -1,43 +1,4 @@
-<?php
-session_start();
 
-// --- 1. Security Check ---
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit;
-}
-
-// --- 2. Database Connection ---
-require_once 'db.php'; // Ensure db.php is in the same directory
-
-$user_id = $_SESSION['user_id'];
-
-// --- 3. Fetch Submitted Documents ---
-// We fetch documents where the user is the initiator and status is NOT 'Draft'
-// We also JOIN with the users table to get the name of the 'current_owner'
-$sql = "SELECT 
-            d.doc_id, 
-            d.title, 
-            d.doc_type, 
-            d.status, 
-            d.created_at, 
-            d.updated_at,
-            u.name AS owner_name
-        FROM documents d
-        LEFT JOIN users u ON d.current_owner_id = u.user_id
-        WHERE d.initiator_id = ? 
-          AND d.status != 'Draft'
-        ORDER BY d.updated_at DESC";
-
-$stmt = $conn->prepare($sql);
-if ($stmt) {
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-} else {
-    die("Error preparing query: " . $conn->error);
-}
-?>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -47,7 +8,6 @@ if ($stmt) {
     <title>My Submitted Documents - DDTMS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 <body class="bg-gray-100">
 
@@ -127,8 +87,8 @@ if ($stmt) {
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                                 <p class="text-gray-900 whitespace-no-wrap">
                                                     <?php 
-                                                        if (!empty($row['owner_name'])) {
-                                                            echo htmlspecialchars($row['owner_name']); 
+                                                        if (!empty($row['owner_firstname'])) {
+                                                            echo htmlspecialchars($row['owner_firstname'] . ' ' . $row['owner_lastname']); 
                                                         } else {
                                                             echo '<span class="text-gray-500 italic">Unassigned</span>';
                                                         }
