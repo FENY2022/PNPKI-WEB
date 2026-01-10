@@ -22,8 +22,7 @@ $sql = "SELECT
             d.status, 
             d.created_at, 
             d.updated_at,
-            u.firstname AS owner_firstname, 
-            u.lastname AS owner_lastname
+            u.name AS owner_name
         FROM documents d
         LEFT JOIN users u ON d.current_owner_id = u.user_id
         WHERE d.initiator_id = ? 
@@ -48,6 +47,7 @@ if ($stmt) {
     <title>My Submitted Documents - DDTMS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 <body class="bg-gray-100">
 
@@ -127,8 +127,8 @@ if ($stmt) {
                                             <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                                                 <p class="text-gray-900 whitespace-no-wrap">
                                                     <?php 
-                                                        if (!empty($row['owner_firstname'])) {
-                                                            echo htmlspecialchars($row['owner_firstname'] . ' ' . $row['owner_lastname']); 
+                                                        if (!empty($row['owner_name'])) {
+                                                            echo htmlspecialchars($row['owner_name']); 
                                                         } else {
                                                             echo '<span class="text-gray-500 italic">Unassigned</span>';
                                                         }
