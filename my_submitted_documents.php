@@ -9,6 +9,21 @@ if (!isset($_SESSION['user_id'])) {
 require_once 'db.php';
 $user_id = $_SESSION['user_id'];
 
+// --- START: SEARCH LOGIC ---
+$search_term = '';
+$where_conditions = ["d.initiator_id = ?"];
+$params = [$user_id];
+$param_types = "i";
+
+if (isset($_GET['search']) && !empty(trim($_GET['search']))) {
+    $search_term = trim($_GET['search']);
+    $where_conditions[] = "(d.title LIKE ? OR d.doc_type LIKE ? OR d.status LIKE ?)";
+    $params[] = "%{$search_term}%";
+    $params[] = "%{$search_term}%";
+    $params[] = "%{$search_term}%";
+    $param_types .= "sss";
+}
+
 // --- START: VIEW DOCUMENT LOGIC ---
 $view_data = null;
 $view_files = [];
@@ -56,17 +71,17 @@ if (isset($_GET['track_id'])) {
     }
 }
 
-// Fetch Main Table
+// Fetch Main Table with Search
 $query = "SELECT d.*, 
           (SELECT message FROM document_actions 
            WHERE doc_id = d.doc_id 
            AND action = 'Returned Document' 
            ORDER BY created_at DESC LIMIT 1) AS return_message
           FROM documents d 
-          WHERE d.initiator_id = ? 
+          WHERE " . implode(' AND ', $where_conditions) . "
           ORDER BY d.created_at DESC";
 $stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
+$stmt->bind_param($param_types, ...$params);
 $stmt->execute();
 $result = $stmt->get_result();
 ?>
@@ -115,7 +130,38 @@ $result = $stmt->get_result();
             <p class="text-slate-500 mt-2 font-medium">Track and manage your submitted document workflow and approvals.</p>
         </div>
 
+        <!-- Search Bar -->
+        <div class="mb-6">
+            <form method="GET" class="flex gap-3">
+                <div class="flex-1 relative">
+                    <input type="text" name="search" value="<?php echo htmlspecialchars($search_term); ?>" 
+                           placeholder="Search documents by title, type, or status..." 
+                           class="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all shadow-sm">
+                    <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                </div>
+                <button type="submit" class="px-8 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                <?php if (!empty($search_term)): ?>
+                    <a href="my_submitted_documents.php" class="px-6 bg-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-300 transition-all flex items-center gap-2">
+                        <i class="fas fa-times"></i> Clear
+                    </a>
+                <?php endif; ?>
+            </form>
+        </div>
+
         <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <?php if (!empty($search_term)): ?>
+                <div class="px-6 py-4 bg-indigo-50 border-b border-indigo-100">
+                    <div class="flex items-center gap-3 text-indigo-700">
+                        <i class="fas fa-info-circle"></i>
+                        <span class="text-sm font-bold">
+                            Showing <?php echo $result->num_rows; ?> result(s) for "<span class="font-black"><?php echo htmlspecialchars($search_term); ?></span>"
+                        </span>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -179,10 +225,10 @@ $result = $stmt->get_result();
                                 </td>
                                 <td class="px-6 py-5 text-right">
                                     <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <a href="?view_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
+                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>view_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
                                             <i class="fas fa-eye text-slate-400"></i> Details
                                         </a>
-                                        <a href="?track_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
+                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>track_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
                                             <i class="fas fa-route text-slate-400"></i> Track
                                         </a>
                                     </div>
@@ -194,7 +240,9 @@ $result = $stmt->get_result();
                             <tr>
                                 <td colspan="5" class="py-20 text-center">
                                     <img src="https://illustrations.popsy.co/slate/empty-folder.svg" class="w-48 mx-auto mb-6 opacity-40">
-                                    <p class="text-slate-400 font-bold tracking-tight italic">No documents found in your history.</p>
+                                    <p class="text-slate-400 font-bold tracking-tight italic">
+                                        <?php echo !empty($search_term) ? 'No documents found matching your search.' : 'No documents found in your history.'; ?>
+                                    </p>
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -204,6 +252,7 @@ $result = $stmt->get_result();
         </div>
     </main>
 
+    <!-- Rest of the code remains the same -->
     <?php if ($view_data): ?>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-10 modal-overlay overflow-hidden">
         <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl h-full flex flex-col overflow-hidden border border-white/40">
@@ -220,7 +269,7 @@ $result = $stmt->get_result();
                         </div>
                     </div>
                 </div>
-                <a href="my_submitted_documents.php" class="bg-white/10 h-10 w-10 flex items-center justify-center rounded-full text-white hover:bg-rose-500 transition-all">
+                <a href="my_submitted_documents.php<?php echo !empty($search_term) ? '?search=' . urlencode($search_term) : ''; ?>" class="bg-white/10 h-10 w-10 flex items-center justify-center rounded-full text-white hover:bg-rose-500 transition-all">
                     <i class="fas fa-times"></i>
                 </a>
             </div>
@@ -290,7 +339,7 @@ $result = $stmt->get_result();
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
             <div class="px-6 py-5 bg-indigo-600 text-white flex justify-between items-center">
                 <h3 class="font-black text-lg">Routing History</h3>
-                <a href="my_submitted_documents.php" class="text-indigo-200 hover:text-white transition">
+                <a href="my_submitted_documents.php<?php echo !empty($search_term) ? '?search=' . urlencode($search_term) : ''; ?>" class="text-indigo-200 hover:text-white transition">
                     <i class="fas fa-times-circle text-2xl"></i>
                 </a>
             </div>
@@ -317,7 +366,7 @@ $result = $stmt->get_result();
                 </div>
             </div>
             <div class="p-5 border-t border-slate-100 text-center">
-                <button onclick="location.href='my_submitted_documents.php'" class="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-[0.3em]">Return to Dashboard</button>
+                <button onclick="location.href='my_submitted_documents.php<?php echo !empty($search_term) ? '?search=' . urlencode($search_term) : ''; ?>'" class="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-[0.3em]">Return to Dashboard</button>
             </div>
         </div>
     </div>
