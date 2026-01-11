@@ -98,7 +98,7 @@ $result = $stmt->get_result();
                     <div class="bg-indigo-600 p-2 rounded-lg shadow-indigo-200 shadow-lg">
                         <i class="fas fa-layer-group text-white text-lg"></i>
                     </div>
-                    <span class="text-xl font-extrabold tracking-tight text-slate-800">DDTMS <span class="text-indigo-600">WEB+</span></span>
+                    <span class="text-xl font-extrabold tracking-tight text-slate-800">DDTMS <span class="text-indigo-600">DENR CARAGA</span></span>
                 </div>
                 <div class="flex items-center gap-4">
                     <button onclick="location.href='new_document.php'" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-sm transition-all shadow-md flex items-center gap-2">
