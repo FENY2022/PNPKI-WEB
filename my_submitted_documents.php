@@ -60,8 +60,15 @@ if (isset($_GET['track_id'])) {
     }
 }
 
-// 2. Fetch All Documents for the Main Table
-$query = "SELECT * FROM documents WHERE initiator_id = ? ORDER BY created_at DESC";
+// 2. Fetch All Documents + Latest 'Returned' message
+$query = "SELECT d.*, 
+          (SELECT message FROM document_actions 
+           WHERE doc_id = d.doc_id 
+           AND action = 'Returned Document' 
+           ORDER BY created_at DESC LIMIT 1) AS return_message
+          FROM documents d 
+          WHERE d.initiator_id = ? 
+          ORDER BY d.created_at DESC";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -129,7 +136,22 @@ $result = $stmt->get_result();
                                         }
                                     ?>
                                         <tr class="hover:bg-slate-50/80 transition-colors">
-                                            <td class="px-6 py-4 whitespace-nowrap font-bold text-slate-700"><?php echo htmlspecialchars($row['title']); ?></td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="font-bold text-slate-700"><?php echo htmlspecialchars($row['title']); ?></div>
+                                                
+                                                <?php if ($status == 'returned' && !empty($row['return_message'])): ?>
+                                                    <div class="mt-2 flex items-start max-w-xs">
+                                                        <div class="bg-rose-50 border-l-2 border-rose-400 p-2 rounded-r-md">
+                                                            <p class="text-[10px] font-bold text-rose-800 uppercase tracking-tighter mb-0.5">
+                                                                <i class="fas fa-comment-dots mr-1"></i> Return Reason:
+                                                            </p>
+                                                            <p class="text-xs text-rose-700 italic leading-tight whitespace-normal">
+                                                                "<?php echo htmlspecialchars($row['return_message']); ?>"
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500"><?php echo htmlspecialchars($row['doc_type']); ?></td>
                                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                                 <span class="px-3 py-1.5 rounded-lg border text-[11px] font-bold uppercase tracking-tight <?php echo $badgeClass; ?>">
@@ -168,7 +190,6 @@ $result = $stmt->get_result();
     <?php if ($view_data): ?>
     <div id="viewModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-10 modal-bg">
         <div class="bg-white rounded-3xl shadow-2xl w-full w-11/12 max-w-7xl flex flex-col overflow-hidden h-full max-h-[95vh] border border-white/20">
-            
             <div class="px-8 py-6 border-b bg-slate-900 text-white flex justify-between items-center">
                 <div class="flex items-center space-x-4">
                     <div class="bg-indigo-500 p-3 rounded-2xl">
@@ -281,9 +302,9 @@ $result = $stmt->get_result();
                                 <p class="text-sm font-black text-slate-800 flex items-center">
                                     <i class="fas fa-user-circle text-slate-300 mr-2"></i><?php echo htmlspecialchars($h['full_name']); ?>
                                 </p>
-                                <?php if (!empty($h['remarks'])): ?>
+                                <?php if (!empty($h['message'])): ?>
                                     <div class="mt-3 p-3 bg-amber-50 border-l-4 border-amber-300 rounded-r-xl text-xs text-amber-900 italic font-medium leading-relaxed">
-                                        "<?php echo htmlspecialchars($h['remarks']); ?>"
+                                        "<?php echo htmlspecialchars($h['message']); ?>"
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -308,9 +329,8 @@ $result = $stmt->get_result();
             
             placeholder.classList.add('hidden');
             viewer.classList.remove('hidden');
-            container.classList.add('bg-white'); // Clear background for document
+            container.classList.add('bg-white'); 
             
-            // Native viewing for common web types
             if (['pdf', 'jpg', 'png', 'jpeg'].includes(ext)) {
                 viewer.src = path;
             } else {
@@ -321,13 +341,12 @@ $result = $stmt->get_result();
                     <div class="bg-white/80 p-10 rounded-3xl shadow-xl">
                         <i class="fas fa-file-word text-indigo-400 text-6xl mb-6"></i>
                         <h5 class="text-slate-800 font-black text-lg">Format Not Supported Online</h5>
-                        <p class="text-slate-500 text-sm mt-2">The <b>.${ext.toUpperCase()}</b> format can't be previewed online yet.</p>
+                        <p class="text-slate-500 text-sm mt-2">The <b>.${ext.toUpperCase()}</b> format can't be previewed online.</p>
                         <a href="${path}" download class="inline-block mt-6 px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-200">Download to View</a>
                     </div>
                 `;
             }
         }
     </script>
-
 </body>
 </html>
