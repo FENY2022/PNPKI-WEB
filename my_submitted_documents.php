@@ -130,7 +130,6 @@ $result = $stmt->get_result();
             <p class="text-slate-500 mt-2 font-medium">Track and manage your submitted document workflow and approvals.</p>
         </div>
 
-        <!-- Search Bar -->
         <div class="mb-6">
             <form method="GET" class="flex gap-3">
                 <div class="flex-1 relative">
@@ -151,17 +150,6 @@ $result = $stmt->get_result();
         </div>
 
         <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <?php if (!empty($search_term)): ?>
-                <div class="px-6 py-4 bg-indigo-50 border-b border-indigo-100">
-                    <div class="flex items-center gap-3 text-indigo-700">
-                        <i class="fas fa-info-circle"></i>
-                        <span class="text-sm font-bold">
-                            Showing <?php echo $result->num_rows; ?> result(s) for "<span class="font-black"><?php echo htmlspecialchars($search_term); ?></span>"
-                        </span>
-                    </div>
-                </div>
-            <?php endif; ?>
-            
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -185,6 +173,7 @@ $result = $stmt->get_result();
                                     'returned'  => ['bg' => 'bg-rose-50', 'text' => 'text-rose-700', 'border' => 'border-rose-200', 'icon' => 'fa-undo'],
                                     'rejected'  => ['bg' => 'bg-rose-50', 'text' => 'text-rose-700', 'border' => 'border-rose-200', 'icon' => 'fa-times-circle'],
                                     'forwarded' => ['bg' => 'bg-indigo-50', 'text' => 'text-indigo-700', 'border' => 'border-indigo-200', 'icon' => 'fa-paper-plane'],
+                                    'draft'     => ['bg' => 'bg-slate-100', 'text' => 'text-slate-700', 'border' => 'border-slate-200', 'icon' => 'fa-pen-ruler'],
                                 ];
                                 $c = $config[$status] ?? ['bg' => 'bg-slate-100', 'text' => 'text-slate-600', 'border' => 'border-slate-200', 'icon' => 'fa-file'];
                             ?>
@@ -225,10 +214,24 @@ $result = $stmt->get_result();
                                 </td>
                                 <td class="px-6 py-5 text-right">
                                     <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>view_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
+                                        
+                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>view_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2" title="View Details">
                                             <i class="fas fa-eye text-slate-400"></i> Details
                                         </a>
-                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>track_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2">
+
+                                        <?php if ($status == 'returned'): ?>
+                                            <a href="resubmit_document.php?id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition flex items-center gap-2 shadow-sm shadow-amber-100">
+                                                <i class="fas fa-sync-alt"></i> Resubmit
+                                            </a>
+                                        <?php endif; ?>
+
+                                        <?php if ($status == 'draft'): ?>
+                                            <a href="edit_document.php?id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition flex items-center gap-2">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </a>
+                                        <?php endif; ?>
+
+                                        <a href="?<?php echo !empty($search_term) ? 'search=' . urlencode($search_term) . '&' : ''; ?>track_id=<?php echo $row['doc_id']; ?>" class="h-9 px-4 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition flex items-center gap-2" title="Track History">
                                             <i class="fas fa-route text-slate-400"></i> Track
                                         </a>
                                     </div>
@@ -252,7 +255,6 @@ $result = $stmt->get_result();
         </div>
     </main>
 
-    <!-- Rest of the code remains the same -->
     <?php if ($view_data): ?>
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-10 modal-overlay overflow-hidden">
         <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl h-full flex flex-col overflow-hidden border border-white/40">
