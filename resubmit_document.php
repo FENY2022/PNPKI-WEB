@@ -2,15 +2,17 @@
 session_start();
 require_once 'db.php';
 
-if (!isset($_SESSION['user_id'])) {
+// Check if user is logged in using your session key
+if (!isset($_SESSION['idSRF'])) {
     header("Location: login.php");
     exit();
 }
 
-$user_id = $_SESSION['user_id'];
-$doc_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$user_id = $_SESSION['idSRF'];
+$doc_id = isset($_GET['id']) ? (int)$GET['id'] : 0;
 
 // 1. Fetch document details
+// Ensure the document belongs to the user and is currently in 'Returned' status
 $query = "SELECT * FROM documents WHERE doc_id = ? AND initiator_id = ? AND status = 'Returned'";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("ii", $doc_id, $user_id);
@@ -21,8 +23,8 @@ if (!$document) {
     die("Document not found or not eligible for resubmission.");
 }
 
-// 2. Fetch the latest message
-$message_query = "SELECT message FROM document_actions WHERE doc_id = ? ORDER BY created_at DESC LIMIT 1";
+// 2. Fetch the latest reviewer message/remarks
+$message_query = "SELECT remarks FROM document_actions WHERE document_id = ? ORDER BY action_date DESC LIMIT 1";
 $m_stmt = $conn->prepare($message_query);
 $m_stmt->bind_param("i", $doc_id);
 $m_stmt->execute();
@@ -33,17 +35,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $title = $_POST['title'];
     $doc_type = $_POST['doc_type'];
     
+    // Update the main document status back to 'Review'
     $update_query = "UPDATE documents SET title = ?, doc_type = ?, status = 'Review', updated_at = NOW() WHERE doc_id = ?";
     $u_stmt = $conn->prepare($update_query);
     $u_stmt->bind_param("ssi", $title, $doc_type, $doc_id);
     
     if ($u_stmt->execute()) {
-        $log_query = "INSERT INTO document_actions (doc_id, user_id, action_type, message) VALUES (?, ?, 'Resubmitted', 'User addressed feedback and uploaded new files.')";
-        $l_stmt = $conn->prepare($log_query);
-        $l_stmt->bind_param("ii", $doc_id, $user_id);
-        $l_stmt->execute();
+        // Log the resubmission action using your specific schema
+        $sql = "INSERT INTO document_actions 
+                (document_id, action_type, remarks, acted_by, action_date)
+                VALUES (?, ?, ?, ?, NOW())";
 
-        // Updated Multiple File Upload Logic with Titles
+        $log_stmt = $conn->prepare($sql);
+        $actionType = 'resubmit';
+        $remarks = "User addressed feedback and uploaded new files.";
+
+        $log_stmt->bind_param(
+            "issi",
+            $doc_id,
+            $actionType,
+            $remarks,
+            $user_id
+        );
+        $log_stmt->execute();
+
+        // Handle Multiple File Uploads
         if (!empty($_FILES['new_files']['name'][0])) {
             $target_dir = "uploads/";
             $titles = $_POST['file_titles'];
@@ -51,7 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             foreach ($_FILES['new_files']['name'] as $key => $val) {
                 $original_name = basename($_FILES["new_files"]["name"][$key]);
                 $custom_title = !empty($titles[$key]) ? $titles[$key] : $original_name;
-                $file_name = "resub_" . time() . "_" . $original_name;
+                
+                // Sanitize filename and add timestamp to prevent overwriting
+                $file_extension = pathinfo($original_name, PATHINFO_EXTENSION);
+                $file_name = "resub_" . time() . "_" . $key . "." . $file_extension;
                 $target_file = $target_dir . $file_name;
                 
                 if (move_uploaded_file($_FILES["new_files"]["tmp_name"][$key], $target_file)) {
@@ -100,8 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         .btn-add-file { border-style: dashed; border-width: 2px; font-weight: 600; color: var(--pnpki-blue); }
         .btn-add-file:hover { background-color: rgba(13, 110, 253, 0.05); }
-        
-        .footer-actions { background: #fafafa; border-top: 1px solid #eee; padding: 1.5rem 2rem; }
     </style>
 </head>
 <body>
@@ -128,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <div>
                                     <strong>Instructions from Reviewer</strong>
                                     <p class="mb-0 mt-2 text-dark lead italic">
-                                        "<?php echo htmlspecialchars($last_action['message'] ?? 'Please review the details below.'); ?>"
+                                        "<?php echo htmlspecialchars($last_action['remarks'] ?? 'Please review the details below.'); ?>"
                                     </p>
                                 </div>
                             </div>
@@ -166,15 +183,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                 <input type="text" name="file_titles[]" class="form-control form-control-sm" placeholder="File Display Name (e.g. Scanned ID)" required>
                                             </div>
                                             <div class="col-md-7">
-                                                <div class="input-group input-group-sm">
-                                                    <input type="file" name="new_files[]" class="form-control" required>
-                                                </div>
+                                                <input type="file" name="new_files[]" class="form-control form-control-sm" required>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="alert alert-info py-2 px-3 mt-3 border-0 small">
-                                    <i class="fas fa-info-circle me-2"></i> Multiple files can be uploaded. Titles help reviewers identify documents quickly.
                                 </div>
                             </div>
 
@@ -197,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         function addFileRow() {
             const container = document.getElementById('fileContainer');
             const row = document.createElement('div');
-            row.className = 'file-upload-row animate__animated animate__fadeInUp';
+            row.className = 'file-upload-row';
             row.innerHTML = `
                 <button type="button" class="btn btn-danger btn-remove" onclick="this.parentElement.remove()">
                     <i class="fas fa-times"></i>
@@ -207,9 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="text" name="file_titles[]" class="form-control form-control-sm" placeholder="File Display Name" required>
                     </div>
                     <div class="col-md-7">
-                        <div class="input-group input-group-sm">
-                            <input type="file" name="new_files[]" class="form-control" required>
-                        </div>
+                        <input type="file" name="new_files[]" class="form-control form-control-sm" required>
                     </div>
                 </div>
             `;
