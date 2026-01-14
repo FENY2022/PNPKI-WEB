@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 12, 2026 at 07:10 AM
+-- Generation Time: Jan 14, 2026 at 09:29 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -32,6 +32,7 @@ CREATE TABLE `documents` (
   `title` varchar(255) NOT NULL,
   `doc_type` varchar(100) NOT NULL,
   `status` enum('Draft','Review','Signing','Completed','Returned','Archived') NOT NULL,
+  `remarks` text DEFAULT NULL,
   `initiator_id` int(11) NOT NULL,
   `current_owner_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -42,15 +43,15 @@ CREATE TABLE `documents` (
 -- Dumping data for table `documents`
 --
 
-INSERT INTO `documents` (`doc_id`, `title`, `doc_type`, `status`, `initiator_id`, `current_owner_id`, `created_at`, `updated_at`) VALUES
-(17, 'MEMO', 'Memorandum', '', 7, 52, '2026-01-06 00:13:00', '2026-01-06 00:13:00'),
-(20, 'MEMO', 'Memorandum', '', 7, 52, '2026-01-06 01:21:26', '2026-01-06 01:21:26'),
-(26, 'MEMO', 'Memorandum', '', 918, 3, '2026-01-07 07:08:49', '2026-01-07 07:08:49'),
-(35, 'MEMO', 'Memorandum', '', 7, 52, '2026-01-07 07:26:32', '2026-01-07 07:26:32'),
-(43, 'MEMO', 'Memorandum', '', 918, 52, '2026-01-08 06:44:07', '2026-01-08 06:44:07'),
-(44, 'MEMO', 'Memorandum', 'Draft', 918, 7, '2026-01-08 07:20:40', '2026-01-08 07:20:40'),
-(45, 'MEMO', 'Memorandum', '', 918, 7, '2026-01-08 07:57:29', '2026-01-08 07:57:29'),
-(46, 'MEMO', 'Memorandum', 'Returned', 918, 7, '2026-01-08 07:58:59', '2026-01-08 07:59:46');
+INSERT INTO `documents` (`doc_id`, `title`, `doc_type`, `status`, `remarks`, `initiator_id`, `current_owner_id`, `created_at`, `updated_at`) VALUES
+(17, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 00:13:00', '2026-01-06 00:13:00'),
+(20, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 01:21:26', '2026-01-06 01:21:26'),
+(26, 'MEMO', 'Memorandum', '', NULL, 918, 3, '2026-01-07 07:08:49', '2026-01-07 07:08:49'),
+(35, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-07 07:26:32', '2026-01-07 07:26:32'),
+(43, 'MEMO', 'Memorandum', '', NULL, 918, 52, '2026-01-08 06:44:07', '2026-01-08 06:44:07'),
+(44, 'MEMO', 'Memorandum', 'Draft', NULL, 918, 7, '2026-01-08 07:20:40', '2026-01-08 07:20:40'),
+(45, 'MEMO', 'Memorandum', '', NULL, 918, 7, '2026-01-08 07:57:29', '2026-01-08 07:57:29'),
+(46, 'MEMO', 'Memorandum', 'Review', NULL, 918, 7, '2026-01-08 07:58:59', '2026-01-14 08:28:43');
 
 -- --------------------------------------------------------
 
