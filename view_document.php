@@ -279,7 +279,7 @@ $stmt_hist->execute();
 $history = $stmt_hist->get_result();
 
 
-echo $user_id;
+
 
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
