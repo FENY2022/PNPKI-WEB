@@ -5,6 +5,7 @@ session_start();
 // Ensure you have run: composer require phpoffice/phpword
 require_once 'vendor/autoload.php'; 
 require_once 'db.php';
+require_once 'db_international.php'; // Added: Connection to the international/OTOS database (assuming it sets $conn_otos)
 
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
@@ -23,6 +24,30 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $doc_id = intval($_GET['id']);
 $user_id = $_SESSION['user_id'];
+
+// Fetch otos_id from users table in DDTS db
+$otos_sql = "SELECT otos_userlink FROM users WHERE user_id = ?";
+$stmt_otos = $conn->prepare($otos_sql);
+$stmt_otos->bind_param("i", $user_id);
+$stmt_otos->execute();
+$otos_result = $stmt_otos->get_result();
+$otos_row = $otos_result->fetch_assoc();
+$otos_id = $otos_row ? $otos_row['otos_userlink'] : null;
+$stmt_otos->close();
+
+// Fetch station from useremployee table in international/OTOS db
+$user_iddb = null;
+if ($otos_id) {
+    $station_sql = "SELECT Station FROM useremployee WHERE id = ?";
+    $stmt_station = $conn_otos->prepare($station_sql);
+    $stmt_station->bind_param("i", $otos_id);
+    $stmt_station->execute();
+    $station_result = $stmt_station->get_result();
+    $station_row = $station_result->fetch_assoc();
+    $user_iddb = $station_row ? $station_row['Station'] : null;
+    $stmt_station->close();
+}
+
 $toasts = [];
 
 // --- 2. AJAX: Fetch Word Content for Editor ---
@@ -241,6 +266,10 @@ $stmt_hist->bind_param("i", $doc_id);
 $stmt_hist->execute();
 $history = $stmt_hist->get_result();
 
+
+echo $user_id;
+
+
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
     $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE user_id != ?";
@@ -248,7 +277,33 @@ if ($doc['current_owner_id'] == $user_id) {
     $stmt_next->bind_param("i", $user_id);
     $stmt_next->execute();
     $res_next = $stmt_next->get_result();
-    while($row = $res_next->fetch_assoc()) $next_users[] = $row;
+    while($row = $res_next->fetch_assoc()) {
+        // Fetch otos_id for this potential next user
+        $otos_sql_next = "SELECT otos_userlink FROM users WHERE user_id = ?";
+        $stmt_otos_next = $conn->prepare($otos_sql_next);
+        $stmt_otos_next->bind_param("i", $row['user_id']);
+        $stmt_otos_next->execute();
+        $otos_result_next = $stmt_otos_next->get_result();
+        if ($otos_row_next = $otos_result_next->fetch_assoc()) {
+            $otos_id_next = $otos_row_next['otos_userlink'];
+            // Fetch station for this potential next user
+            $station_sql_next = "SELECT Station FROM useremployee WHERE id = ?";
+            $stmt_station_next = $conn_otos->prepare($station_sql_next);
+            $stmt_station_next->bind_param("i", $otos_id_next);
+            $stmt_station_next->execute();
+            $station_result_next = $stmt_station_next->get_result();
+            if ($station_row_next = $station_result_next->fetch_assoc()) {
+                $station_next = $station_row_next['Station'];
+                // Filter: Add only if station is different from current user's station (assuming routing to different station)
+                if ($station_next != $user_iddb) {
+                    $next_users[] = $row;
+                }
+            }
+            $stmt_station_next->close();
+        }
+        $stmt_otos_next->close();
+    }
+    $stmt_next->close();
 }
 
 ?>
