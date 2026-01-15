@@ -5,7 +5,19 @@ session_start();
 // Ensure you have run: composer require phpoffice/phpword
 require_once 'vendor/autoload.php'; 
 require_once 'db.php';
-require_once 'db_international.php'; // Added: Connection to the international/OTOS database (assuming it sets $conn_otos)
+require_once 'db_international.php'; // Added: Connection to the international/OTOS database (defines get_db_connection())
+
+// Initialize the connection by calling the function
+$conn_otos = get_db_connection();
+
+// Optional: Debug the connection (uncomment if needed)
+// var_dump($conn_otos); // Should show a mysqli object if successful
+// if ($conn_otos->ping()) { echo "Connection successful!"; } else { echo "Connection failed: " . $conn_otos->error; }
+
+// Check if $conn_otos is defined after require
+if (!isset($conn_otos) || $conn_otos === null) {
+    die("Error: Database connection \$conn_otos is not defined. Check db_international.php.");
+}
 
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
@@ -268,7 +280,6 @@ $history = $stmt_hist->get_result();
 
 
 echo $user_id;
-
 
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
@@ -575,7 +586,7 @@ if ($doc['current_owner_id'] == $user_id) {
                 if(data.status === 'success') {
                     tinymce.get('tinyEditor').setContent(data.content);
                 } else {
-                    alert("Error: " + data.message);
+                    alert("Error: " . data.message);
                     closeEditor();
                 }
             })
