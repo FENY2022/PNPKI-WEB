@@ -23,6 +23,12 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 $doc_id = intval($_GET['id']);
 $user_id = $_SESSION['user_id'];
+// Fetch the station from session for filtering signatories
+
+
+
+
+$station_filter = $_SESSION['signatory_station'] ?? ''; 
 $toasts = [];
 
 // --- 2. AJAX: Fetch Word Content for Editor ---
@@ -38,7 +44,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'fetch_content' && isset($_GET[
             $htmlWriter->save('php://output');
             $html_content = ob_get_clean();
             
-            // Extract body content
             preg_match('/<body[^>]*>(.*?)<\/body>/is', $html_content, $matches);
             $body_content = $matches[1] ?? $html_content;
 
@@ -55,7 +60,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'fetch_content' && isset($_GET[
 // --- 3. Handle Form Submissions ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
-    // Check Ownership
     $check_sql = "SELECT current_owner_id FROM documents WHERE doc_id = ?";
     $stmt_check = $conn->prepare($check_sql);
     $stmt_check->bind_param("i", $doc_id);
@@ -67,23 +71,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $conn->begin_transaction();
         try {
             
-            // --- A. Save Online Edits (UPDATED FIX) ---
             if (isset($_POST['save_edit_content'])) {
                 $html_input = $_POST['save_edit_content'];
-                
-                // 1. Basic Cleanup
                 $html_input = str_replace('&nbsp;', ' ', $html_input);
                 
-                // 2. Load into DOMDocument to fix structure
                 $dom = new DOMDocument();
-                // Suppress warnings for HTML parsing
                 libxml_use_internal_errors(true);
-                // Load HTML with UTF-8 encoding wrapper
                 $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html_input, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                 libxml_clear_errors();
 
-                // 3. Extract ONLY the inner content of <body>
-                // We do NOT want to pass <html> or <body> tags to PHPWord as they cause corruption
                 $body = $dom->getElementsByTagName('body')->item(0);
                 $clean_html = '';
                 
@@ -92,22 +88,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $clean_html .= $dom->saveXML($child);
                     }
                 } else {
-                    // Fallback if only text/fragments were sent
                     $clean_html = $dom->saveXML($dom->documentElement);
                 }
 
-                // 4. Generate DOCX
                 $phpWord = new PhpWord();
                 $section = $phpWord->addSection();
                 
                 try {
                     \PhpOffice\PhpWord\Shared\Html::addHtml($section, $clean_html, false, false);
                 } catch (Exception $e) {
-                    // Fallback: Save as plain text if HTML parsing fails
                     $section->addText(strip_tags($html_input));
                 }
 
-                // 5. Save to server
                 $new_filename = uniqid('edited_', true) . '.docx';
                 $dest_path = 'uploads/' . $new_filename;
                 
@@ -116,7 +108,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $objWriter = IOFactory::createWriter($phpWord, 'Word2007');
                 $objWriter->save($dest_path);
 
-                // Update Database
                 $v_sql = "SELECT IFNULL(MAX(version), 0) + 1 FROM document_files WHERE doc_id = ?";
                 $stmt_v = $conn->prepare($v_sql);
                 $stmt_v->bind_param("i", $doc_id);
@@ -140,7 +131,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $toasts[] = ['type' => 'success', 'message' => "Changes saved as Version $next_ver!"];
             } 
             
-            // --- B. Process Document (Forward/Return/Finalize) ---
             elseif (isset($_POST['action_type'])) {
                 
                 $action_type = $_POST['action_type']; 
@@ -241,15 +231,26 @@ $stmt_hist->bind_param("i", $doc_id);
 $stmt_hist->execute();
 $history = $stmt_hist->get_result();
 
+// --- UPDATED SIGNATORY FETCHING LOGIC ---
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
-    $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE user_id != ?";
+    // Modified to use the station filter and internal user ID
+    $sql_next = "SELECT DISTINCT u.user_id, ds.full_name 
+                 FROM document_signatories ds
+                 INNER JOIN office_station os ON ds.batch_id = os.id
+                 INNER JOIN users u ON ds.user_id = u.otos_userlink
+                 WHERE os.station = ? AND u.user_id != ?";
+                 
     $stmt_next = $conn->prepare($sql_next);
-    $stmt_next->bind_param("i", $user_id);
+    $stmt_next->bind_param("si", $station_filter, $user_id);
     $stmt_next->execute();
     $res_next = $stmt_next->get_result();
-    while($row = $res_next->fetch_assoc()) $next_users[] = $row;
+    while($row = $res_next->fetch_assoc()) {
+        $next_users[] = $row;
+    }
+    $stmt_next->close();
 }
+
 ?>
 
 <!DOCTYPE html>

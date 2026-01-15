@@ -38,7 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $u_stmt->bind_param("ssi", $title, $doc_type, $doc_id);
     
     if ($u_stmt->execute()) {
-        $log_query = "INSERT INTO document_actions (doc_id, user_id, action_type, message) VALUES (?, ?, 'Resubmitted', 'User addressed feedback and uploaded new files.')";
+        // FIX 1: Changed 'action_type' to 'action' to match your database schema
+        $log_query = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, 'Resubmitted', 'User addressed feedback and uploaded new files.')";
         $l_stmt = $conn->prepare($log_query);
         $l_stmt->bind_param("ii", $doc_id, $user_id);
         $l_stmt->execute();
@@ -55,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $target_file = $target_dir . $file_name;
                 
                 if (move_uploaded_file($_FILES["new_files"]["tmp_name"][$key], $target_file)) {
-                    $f_stmt = $conn->prepare("INSERT INTO document_files (doc_id, file_name, file_path, uploader_id) VALUES (?, ?, ?, ?)");
+                    // FIX 2: Changed 'file_name' to 'filename' and 'file_path' to 'filepath'
+                    $f_stmt = $conn->prepare("INSERT INTO document_files (doc_id, filename, filepath, uploader_id) VALUES (?, ?, ?, ?)");
                     $f_stmt->bind_param("issi", $doc_id, $custom_title, $target_file, $user_id);
                     $f_stmt->execute();
                 }
