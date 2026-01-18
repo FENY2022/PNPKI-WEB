@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 $doc_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$section_chiefs = [];
 
 // 1. Fetch document details
 $query = "SELECT * FROM documents WHERE doc_id = ? AND initiator_id = ? AND status = 'Returned'";
@@ -21,30 +22,57 @@ if (!$document) {
     die("Document not found or not eligible for resubmission.");
 }
 
-// 2. Fetch the latest message
+// 2. Fetch the latest message from reviewer
 $message_query = "SELECT message FROM document_actions WHERE doc_id = ? ORDER BY created_at DESC LIMIT 1";
 $m_stmt = $conn->prepare($message_query);
 $m_stmt->bind_param("i", $doc_id);
 $m_stmt->execute();
 $last_action = $m_stmt->get_result()->fetch_assoc();
 
-// 3. Handle Resubmission Logic
+// 3. Fetch Section Chiefs/Signatories based on station
+try {
+    if (isset($_SESSION['signatory_station'])) {
+        $station_filter = $_SESSION['signatory_station'];
+        
+        $sql = "SELECT DISTINCT u.user_id, ds.full_name 
+                FROM document_signatories ds
+                INNER JOIN office_station os ON ds.batch_id = os.id
+                INNER JOIN users u ON ds.user_id = u.otos_userlink
+                WHERE os.station = ?";
+                
+        $stmt_chiefs = $conn->prepare($sql);
+        $stmt_chiefs->bind_param("s", $station_filter);
+        $stmt_chiefs->execute();
+        $result_chiefs = $stmt_chiefs->get_result();
+        
+        while($row = $result_chiefs->fetch_assoc()) {
+            $section_chiefs[] = $row;
+        }
+        $stmt_chiefs->close();
+    }
+} catch (Exception $e) {
+    error_log("Error loading signatories: " . $e->getMessage());
+}
+
+// 4. Handle Resubmission Logic
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $title = $_POST['title'];
     $doc_type = $_POST['doc_type'];
+    $section_chief_id = (int)$_POST['section_chief_id'];
     
-    $update_query = "UPDATE documents SET title = ?, doc_type = ?, status = 'Review', updated_at = NOW() WHERE doc_id = ?";
+    // Update document: reset status to Review and update the current owner to the selected chief
+    $update_query = "UPDATE documents SET title = ?, doc_type = ?, status = 'Review', current_owner_id = ?, updated_at = NOW() WHERE doc_id = ?";
     $u_stmt = $conn->prepare($update_query);
-    $u_stmt->bind_param("ssi", $title, $doc_type, $doc_id);
+    $u_stmt->bind_param("ssii", $title, $doc_type, $section_chief_id, $doc_id);
     
     if ($u_stmt->execute()) {
-        // FIX 1: Changed 'action_type' to 'action' to match your database schema
-        $log_query = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, 'Resubmitted', 'User addressed feedback and uploaded new files.')";
+        // Log the action
+        $log_query = "INSERT INTO document_actions (doc_id, user_id, action, message) VALUES (?, ?, 'Resubmitted', 'User addressed feedback and routed to selected chief.')";
         $l_stmt = $conn->prepare($log_query);
         $l_stmt->bind_param("ii", $doc_id, $user_id);
         $l_stmt->execute();
 
-        // Updated Multiple File Upload Logic with Titles
+        // Handle File Uploads
         if (!empty($_FILES['new_files']['name'][0])) {
             $target_dir = "uploads/";
             $titles = $_POST['file_titles'];
@@ -56,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $target_file = $target_dir . $file_name;
                 
                 if (move_uploaded_file($_FILES["new_files"]["tmp_name"][$key], $target_file)) {
-                    // FIX 2: Changed 'file_name' to 'filename' and 'file_path' to 'filepath'
                     $f_stmt = $conn->prepare("INSERT INTO document_files (doc_id, filename, filepath, uploader_id) VALUES (?, ?, ?, ?)");
                     $f_stmt->bind_param("issi", $doc_id, $custom_title, $target_file, $user_id);
                     $f_stmt->execute();
@@ -83,27 +110,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <style>
         :root { --pnpki-blue: #0d6efd; --pnpki-light: #f8f9fa; }
         body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; color: #333; }
-        
         .resubmit-card { border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); overflow: hidden; }
         .card-header { background: linear-gradient(135deg, #ffc107 0%, #ffca2c 100%); border: none; padding: 1.5rem; }
-        
         .message-box { background: #fffdf5; border: 1px solid #ffeeba; border-left: 5px solid #ffc107; border-radius: 8px; padding: 20px; margin-bottom: 2rem; }
         .message-box strong { color: #856404; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; }
-        
         .section-label { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: #6c757d; margin-bottom: 1rem; display: block; border-bottom: 2px solid #eee; padding-bottom: 5px; }
-        
         .file-upload-row { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; transition: all 0.2s; position: relative; }
-        .file-upload-row:hover { border-color: var(--pnpki-blue); box-shadow: 0 4px 12px rgba(13, 110, 253, 0.05); }
-        
         .btn-remove { position: absolute; top: -10px; right: -10px; width: 25px; height: 25px; border-radius: 50%; padding: 0; line-height: 22px; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        
         .form-control, .form-select { border-radius: 8px; padding: 0.6rem 1rem; border: 1px solid #ced4da; }
-        .form-control:focus { box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1); border-color: var(--pnpki-blue); }
-        
         .btn-add-file { border-style: dashed; border-width: 2px; font-weight: 600; color: var(--pnpki-blue); }
-        .btn-add-file:hover { background-color: rgba(13, 110, 253, 0.05); }
-        
-        .footer-actions { background: #fafafa; border-top: 1px solid #eee; padding: 1.5rem 2rem; }
     </style>
 </head>
 <body>
@@ -139,16 +154,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <form action="" method="POST" enctype="multipart/form-data" id="resubmitForm">
                             <span class="section-label">General Information</span>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-8">
+                                <div class="col-md-12">
                                     <label class="form-label small fw-bold">Document Title</label>
                                     <input type="text" name="title" class="form-control" value="<?php echo htmlspecialchars($document['title']); ?>" required>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Document Type</label>
                                     <select name="doc_type" class="form-select">
                                         <option value="Memorandum" <?php if($document['doc_type'] == 'Memorandum') echo 'selected'; ?>>Memorandum</option>
                                         <option value="Letter" <?php if($document['doc_type'] == 'Letter') echo 'selected'; ?>>Letter</option>
                                         <option value="Report" <?php if($document['doc_type'] == 'Report') echo 'selected'; ?>>Report</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Route to Section/Division Chief/ARDS <span class="text-danger">*</span></label>
+                                    <select name="section_chief_id" class="form-select" required>
+                                        <option value="">Select a Section Chief...</option>
+                                        <?php foreach ($section_chiefs as $chief): ?>
+                                            <option value="<?php echo $chief['user_id']; ?>" <?php echo ($document['current_owner_id'] == $chief['user_id']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($chief['full_name']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                        <?php if (empty($section_chiefs)): ?>
+                                            <option value="" disabled>No signatories found for your station.</option>
+                                        <?php endif; ?>
                                     </select>
                                 </div>
                             </div>
@@ -174,9 +203,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="alert alert-info py-2 px-3 mt-3 border-0 small">
-                                    <i class="fas fa-info-circle me-2"></i> Multiple files can be uploaded. Titles help reviewers identify documents quickly.
                                 </div>
                             </div>
 
