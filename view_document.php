@@ -251,6 +251,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 }
 
 // --- 4. Fetch Data for View ---
+// Fetches all columns from documents table (d.*) including 'Station' if it exists there
 $sql_doc = "SELECT d.*, u.first_name as init_fname, u.last_name as init_lname, co.first_name as owner_fname, co.last_name as owner_lname FROM documents d JOIN users u ON d.initiator_id = u.user_id LEFT JOIN users co ON d.current_owner_id = co.user_id WHERE d.doc_id = ?";
 $stmt = $conn->prepare($sql_doc);
 $stmt->bind_param("i", $doc_id);
@@ -258,6 +259,9 @@ $stmt->execute();
 $doc = $stmt->get_result()->fetch_assoc();
 
 if (!$doc) die("Document not found.");
+
+// --- NEW: Assign Station Variable ---
+ $Station = isset($doc['Station']) ? $doc['Station'] : '';
 
 $sql_files = "SELECT * FROM document_files WHERE doc_id = ? ORDER BY version DESC";
 $stmt_files = $conn->prepare($sql_files);
@@ -283,39 +287,15 @@ $history = $stmt_hist->get_result();
 
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
-    $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE user_id != ?";
+    $sql_next = "SELECT user_id, full_name, Station FROM document_signatories WHERE Station != ?";
     $stmt_next = $conn->prepare($sql_next);
-    $stmt_next->bind_param("i", $user_id);
+    $stmt_next->bind_param("i", $Station);
     $stmt_next->execute();
     $res_next = $stmt_next->get_result();
     while($row = $res_next->fetch_assoc()) {
-        // Fetch otos_id for this potential next user
-        $otos_sql_next = "SELECT otos_userlink FROM users WHERE user_id = ?";
-        $stmt_otos_next = $conn->prepare($otos_sql_next);
-        $stmt_otos_next->bind_param("i", $row['user_id']);
-        $stmt_otos_next->execute();
-        $otos_result_next = $stmt_otos_next->get_result();
-        if ($otos_row_next = $otos_result_next->fetch_assoc()) {
-            $otos_id_next = $otos_row_next['otos_userlink'];
-            // Fetch station for this potential next user
-            $station_sql_next = "SELECT Station FROM useremployee WHERE id = ?";
-            $stmt_station_next = $conn_otos->prepare($station_sql_next);
-            $stmt_station_next->bind_param("i", $otos_id_next);
-            $stmt_station_next->execute();
-            $station_result_next = $stmt_station_next->get_result();
-            if ($station_row_next = $station_result_next->fetch_assoc()) {
-                $station_next = $station_row_next['Station'];
-                // Filter: Add only if station is different from current user's station (assuming routing to different station)
-                if ($station_next != $user_iddb) {
+       
                     $next_users[] = $row;
                 }
-            }
-            $stmt_station_next->close();
-        }
-        $stmt_otos_next->close();
-    }
-    $stmt_next->close();
-}
 
 ?>
 
@@ -358,6 +338,9 @@ if ($doc['current_owner_id'] == $user_id) {
                     <h1 class="text-2xl font-bold text-gray-900"><?php echo htmlspecialchars($doc['title']); ?></h1>
                     <p class="text-sm text-gray-500 mt-1">
                         From: <?php echo htmlspecialchars($doc['init_fname'] . ' ' . $doc['init_lname']); ?>
+                    </p>
+                    <p class="text-sm text-gray-500 mt-1">
+                        Station: <?php echo htmlspecialchars($Station); ?>
                     </p>
                 </div>
                 <div class="text-right">
