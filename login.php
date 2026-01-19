@@ -53,6 +53,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['full_name'] = $user['first_name'] . ' ' . $user['last_name'];
                         $_SESSION['role'] = $user['role'];
                         $_SESSION['otos_userlink'] = $user['otos_userlink'];
+                        $_SESSION['Station'] = $user['Station'];
+
 
                         
                         // Redirect to the member-only area
