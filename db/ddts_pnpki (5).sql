@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 14, 2026 at 09:29 AM
+-- Generation Time: Jan 19, 2026 at 08:28 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -36,22 +36,24 @@ CREATE TABLE `documents` (
   `initiator_id` int(11) NOT NULL,
   `current_owner_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `Station` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `documents`
 --
 
-INSERT INTO `documents` (`doc_id`, `title`, `doc_type`, `status`, `remarks`, `initiator_id`, `current_owner_id`, `created_at`, `updated_at`) VALUES
-(17, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 00:13:00', '2026-01-06 00:13:00'),
-(20, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 01:21:26', '2026-01-06 01:21:26'),
-(26, 'MEMO', 'Memorandum', '', NULL, 918, 3, '2026-01-07 07:08:49', '2026-01-07 07:08:49'),
-(35, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-07 07:26:32', '2026-01-07 07:26:32'),
-(43, 'MEMO', 'Memorandum', '', NULL, 918, 52, '2026-01-08 06:44:07', '2026-01-08 06:44:07'),
-(44, 'MEMO', 'Memorandum', 'Draft', NULL, 918, 7, '2026-01-08 07:20:40', '2026-01-08 07:20:40'),
-(45, 'MEMO', 'Memorandum', '', NULL, 918, 7, '2026-01-08 07:57:29', '2026-01-08 07:57:29'),
-(46, 'MEMO', 'Memorandum', 'Review', NULL, 918, 7, '2026-01-08 07:58:59', '2026-01-14 08:28:43');
+INSERT INTO `documents` (`doc_id`, `title`, `doc_type`, `status`, `remarks`, `initiator_id`, `current_owner_id`, `created_at`, `updated_at`, `Station`) VALUES
+(17, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 00:13:00', '2026-01-06 00:13:00', ''),
+(20, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-06 01:21:26', '2026-01-06 01:21:26', ''),
+(26, 'MEMO', 'Memorandum', '', NULL, 918, 3, '2026-01-07 07:08:49', '2026-01-07 07:08:49', ''),
+(35, 'MEMO', 'Memorandum', '', NULL, 7, 52, '2026-01-07 07:26:32', '2026-01-07 07:26:32', ''),
+(43, 'MEMO', 'Memorandum', 'Review', NULL, 918, 52, '2026-01-08 06:44:07', '2026-01-19 06:37:09', ''),
+(44, 'MEMO', 'Memorandum', 'Draft', NULL, 918, 7, '2026-01-08 07:20:40', '2026-01-08 07:20:40', ''),
+(45, 'MEMO', 'Memorandum', '', NULL, 918, 7, '2026-01-08 07:57:29', '2026-01-08 07:57:29', ''),
+(46, 'MEMO', 'Memorandum', 'Review', NULL, 918, 7, '2026-01-08 07:58:59', '2026-01-14 08:28:43', ''),
+(47, 'MEMO', 'Memorandum', '', NULL, 918, 7, '2026-01-19 07:26:58', '2026-01-19 07:26:58', 'RO PMD');
 
 -- --------------------------------------------------------
 
@@ -91,7 +93,18 @@ INSERT INTO `document_actions` (`action_id`, `doc_id`, `user_id`, `action`, `mes
 (23, 44, 918, 'Saved as Draft', '', '2026-01-08 07:20:40'),
 (24, 45, 918, 'Submitted', '', '2026-01-08 07:57:29'),
 (25, 46, 918, 'Submitted', '', '2026-01-08 07:58:59'),
-(26, 46, 7, 'Returned Document', 'PLEASE FSDFSDFSDFSDFDSFDS', '2026-01-08 07:59:46');
+(26, 46, 7, 'Returned Document', 'PLEASE FSDFSDFSDFSDFDSFDS', '2026-01-08 07:59:46'),
+(27, 43, 52, 'Returned Document', 'No policy', '2026-01-14 08:33:38'),
+(28, 43, 52, 'Returned Document', '', '2026-01-14 08:50:53'),
+(29, 43, 52, 'Returned Document', '', '2026-01-15 05:28:27'),
+(30, 43, 52, 'Returned Document', '', '2026-01-15 05:35:05'),
+(31, 43, 918, 'Resubmitted', 'User addressed feedback and uploaded new files.', '2026-01-15 05:35:36'),
+(32, 43, 52, 'Returned Document', ' [Uploaded signed file]', '2026-01-15 07:39:09'),
+(33, 43, 918, 'Resubmitted', 'User addressed feedback and routed to selected chief.', '2026-01-18 01:06:40'),
+(34, 43, 7, 'Returned Document', 'sgfdgfdgdfg', '2026-01-19 06:06:54'),
+(35, 43, 918, 'Resubmitted', 'User addressed feedback and routed to selected chief.', '2026-01-19 06:07:36'),
+(36, 43, 7, 'Forwarded', '', '2026-01-19 06:37:09'),
+(37, 47, 918, 'Submitted', 'Please Check my documents', '2026-01-19 07:26:58');
 
 -- --------------------------------------------------------
 
@@ -131,7 +144,13 @@ INSERT INTO `document_files` (`file_id`, `doc_id`, `uploader_id`, `filename`, `f
 (22, 43, 918, 'LAS_Science 3_Q3_Week5_RTP (2).pdf', 'uploads/doc_695f52373b9033.52673515.pdf', 1, '2026-01-08 06:44:07'),
 (23, 44, 918, 'LAS_ENGLISH3_Q3_WEEK5 (1).pdf', 'uploads/doc_695f5ac833c453.20241906.pdf', 1, '2026-01-08 07:20:40'),
 (24, 45, 918, 'LAS_Science 3_Q3_Week5_RTP (2).pdf', 'uploads/doc_695f63692da008.11952935.pdf', 1, '2026-01-08 07:57:29'),
-(25, 46, 918, 'LAS_Science 3_Q3_Week5_RTP (2).pdf', 'uploads/doc_695f63c3536486.88476545.pdf', 1, '2026-01-08 07:58:59');
+(25, 46, 918, 'LAS_Science 3_Q3_Week5_RTP (2).pdf', 'uploads/doc_695f63c3536486.88476545.pdf', 1, '2026-01-08 07:58:59'),
+(26, 43, 918, 'MEMO FILE ', 'uploads/resub_1768455336_Shrinkage_250914_193150.pdf', 1, '2026-01-15 05:35:36'),
+(27, 43, 52, 'WST-112-Properties-and-Utilization-of-Forest-Products.pdf', 'uploads/signed_6968999ddacac6.41916649.pdf', 2, '2026-01-15 07:39:09'),
+(28, 43, 918, 'MEMO FILE ', 'uploads/resub_1768698400_Directory Data Conversion Options - Directory Data Conversion Options.pdf', 1, '2026-01-18 01:06:40'),
+(29, 43, 918, 'MEMO FILE ', 'uploads/resub_1768802856_CATALANDENR-PDS-2026.xlsx', 1, '2026-01-19 06:07:36'),
+(30, 47, 918, 'Directory Data Conversion Options - Directory Data Conversion Options.pdf', 'uploads/doc_696ddcc2d04221.10024285.pdf', 1, '2026-01-19 07:26:58'),
+(31, 47, 918, 'QUESTIONNAIRE final check.docx', 'uploads/doc_696ddcc2d17b50.77419108.docx', 1, '2026-01-19 07:26:58');
 
 -- --------------------------------------------------------
 
@@ -287,19 +306,19 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `documents`
 --
 ALTER TABLE `documents`
-  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=47;
+  MODIFY `doc_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=48;
 
 --
 -- AUTO_INCREMENT for table `document_actions`
 --
 ALTER TABLE `document_actions`
-  MODIFY `action_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
+  MODIFY `action_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=38;
 
 --
 -- AUTO_INCREMENT for table `document_files`
 --
 ALTER TABLE `document_files`
-  MODIFY `file_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `file_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
 
 --
 -- AUTO_INCREMENT for table `document_signatories`
