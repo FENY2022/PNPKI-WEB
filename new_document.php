@@ -153,13 +153,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($errors)) {
         $conn->begin_transaction();
         try {
-            // Step 1: Insert into `documents` table
-            $sql_doc = "INSERT INTO documents (title, doc_type, initiator_id, current_owner_id, status) 
-                        VALUES (?, ?, ?, ?, ?)";
+            // Retrieve station from session
+            $station = isset($_SESSION['signatory_station']) ? $_SESSION['signatory_station'] : 'Unknown';
+
+            // Step 1: Insert into `documents` table (Now including station)
+            $sql_doc = "INSERT INTO documents (title, doc_type, initiator_id, current_owner_id, status, station) 
+                        VALUES (?, ?, ?, ?, ?, ?)";
             $stmt_doc = $conn->prepare($sql_doc);
             
-            // "ssiis" -> string, string, integer, integer, string
-            $stmt_doc->bind_param("ssiis", $title, $doc_type, $initiator_id, $section_chief_id, $submission_status);
+            // "ssiiss" -> string, string, integer, integer, string, string
+            $stmt_doc->bind_param("ssiiss", $title, $doc_type, $initiator_id, $section_chief_id, $submission_status, $station);
             $stmt_doc->execute();
             $doc_id = $conn->insert_id; 
             
