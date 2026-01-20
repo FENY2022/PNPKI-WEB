@@ -287,15 +287,39 @@ $history = $stmt_hist->get_result();
 
 $next_users = [];
 if ($doc['current_owner_id'] == $user_id) {
-    $sql_next = "SELECT user_id, full_name, Station FROM document_signatories WHERE Station != ?";
+    $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE user_id != ?";
     $stmt_next = $conn->prepare($sql_next);
-    $stmt_next->bind_param("i", $Station);
+    $stmt_next->bind_param("i", $user_id);
     $stmt_next->execute();
     $res_next = $stmt_next->get_result();
     while($row = $res_next->fetch_assoc()) {
-       
+        // Fetch otos_id for this potential next user
+        $otos_sql_next = "SELECT otos_userlink FROM users WHERE user_id = ?";
+        $stmt_otos_next = $conn->prepare($otos_sql_next);
+        $stmt_otos_next->bind_param("i", $row['user_id']);
+        $stmt_otos_next->execute();
+        $otos_result_next = $stmt_otos_next->get_result();
+        if ($otos_row_next = $otos_result_next->fetch_assoc()) {
+            $otos_id_next = $otos_row_next['otos_userlink'];
+            // Fetch station for this potential next user
+            $station_sql_next = "SELECT Station FROM useremployee WHERE id = ?";
+            $stmt_station_next = $conn_otos->prepare($station_sql_next);
+            $stmt_station_next->bind_param("i", $otos_id_next);
+            $stmt_station_next->execute();
+            $station_result_next = $stmt_station_next->get_result();
+            if ($station_row_next = $station_result_next->fetch_assoc()) {
+                $station_next = $station_row_next['Station'];
+                // Filter: Add only if station is different from current user's station (assuming routing to different station)
+                if ($station_next != $user_iddb) {
                     $next_users[] = $row;
                 }
+            }
+            $stmt_station_next->close();
+        }
+        $stmt_otos_next->close();
+    }
+    $stmt_next->close();
+}
 
 ?>
 
