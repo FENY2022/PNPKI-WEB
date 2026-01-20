@@ -5,14 +5,10 @@ session_start();
 // Ensure you have run: composer require phpoffice/phpword
 require_once 'vendor/autoload.php'; 
 require_once 'db.php';
-require_once 'db_international.php'; // Added: Connection to the international/OTOS database (defines get_db_connection())
+require_once 'db_international.php'; // Added: Connection to the international/OTOS database
 
 // Initialize the connection by calling the function
 $conn_otos = get_db_connection();
-
-// Optional: Debug the connection (uncomment if needed)
-// var_dump($conn_otos); // Should show a mysqli object if successful
-// if ($conn_otos->ping()) { echo "Connection successful!"; } else { echo "Connection failed: " . $conn_otos->error; }
 
 // Check if $conn_otos is defined after require
 if (!isset($conn_otos) || $conn_otos === null) {
@@ -104,23 +100,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $conn->begin_transaction();
         try {
             
-            // --- A. Save Online Edits (UPDATED FIX) ---
+            // --- A. Save Online Edits ---
             if (isset($_POST['save_edit_content'])) {
                 $html_input = $_POST['save_edit_content'];
                 
                 // 1. Basic Cleanup
                 $html_input = str_replace('&nbsp;', ' ', $html_input);
                 
-                // 2. Load into DOMDocument to fix structure
+                // 2. Load into DOMDocument
                 $dom = new DOMDocument();
-                // Suppress warnings for HTML parsing
                 libxml_use_internal_errors(true);
-                // Load HTML with UTF-8 encoding wrapper
                 $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html_input, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                 libxml_clear_errors();
 
-                // 3. Extract ONLY the inner content of <body>
-                // We do NOT want to pass <html> or <body> tags to PHPWord as they cause corruption
+                // 3. Extract content
                 $body = $dom->getElementsByTagName('body')->item(0);
                 $clean_html = '';
                 
@@ -129,7 +122,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $clean_html .= $dom->saveXML($child);
                     }
                 } else {
-                    // Fallback if only text/fragments were sent
                     $clean_html = $dom->saveXML($dom->documentElement);
                 }
 
@@ -140,7 +132,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 try {
                     \PhpOffice\PhpWord\Shared\Html::addHtml($section, $clean_html, false, false);
                 } catch (Exception $e) {
-                    // Fallback: Save as plain text if HTML parsing fails
                     $section->addText(strip_tags($html_input));
                 }
 
@@ -182,7 +173,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 
                 $action_type = $_POST['action_type']; 
                 $remarks = trim($_POST['remarks']);
-                $next_user_id = isset($_POST['next_user_id']) ? intval($_POST['next_user_id']) : null;
+                
+                $next_user_id = (!empty($_POST['next_user_id'])) ? intval($_POST['next_user_id']) : null;
 
                 if (isset($_FILES['signed_file']) && $_FILES['signed_file']['error'] === UPLOAD_ERR_OK) {
                     $file_tmp = $_FILES['signed_file']['tmp_name'];
@@ -212,7 +204,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $new_status = "";
                 $log_action = "";
-                $target_owner = $next_user_id;
+                $target_owner = null;
 
                 if ($action_type === 'Return') {
                     $new_status = "Returned";
@@ -221,10 +213,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 } elseif ($action_type === 'Finalize') {
                     $new_status = "Completed";
                     $log_action = "Approved & Finalized";
-                    $target_owner = 0; 
+                    $target_owner = null; 
                 } else {
+                    if (!$next_user_id) {
+                        throw new Exception("You must select a user to forward the document to.");
+                    }
                     $new_status = "Review"; 
                     $log_action = "Forwarded";
+                    $target_owner = $next_user_id;
                 }
 
                 $update_sql = "UPDATE documents SET current_owner_id = ?, status = ?, updated_at = NOW() WHERE doc_id = ?";
@@ -238,7 +234,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $stmt_log->execute();
 
                 $conn->commit();
-                $toasts[] = ['type' => 'success', 'message' => "Document processed successfully!"];
+                $toasts[] = ['type' => 'success', 'message' => "Document processed successfully! Redirecting..."];
             }
 
         } catch (Exception $e) {
@@ -251,7 +247,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 }
 
 // --- 4. Fetch Data for View ---
-// Fetches all columns from documents table (d.*) including 'Station' if it exists there
 $sql_doc = "SELECT d.*, u.first_name as init_fname, u.last_name as init_lname, co.first_name as owner_fname, co.last_name as owner_lname FROM documents d JOIN users u ON d.initiator_id = u.user_id LEFT JOIN users co ON d.current_owner_id = co.user_id WHERE d.doc_id = ?";
 $stmt = $conn->prepare($sql_doc);
 $stmt->bind_param("i", $doc_id);
@@ -260,8 +255,7 @@ $doc = $stmt->get_result()->fetch_assoc();
 
 if (!$doc) die("Document not found.");
 
-// --- NEW: Assign Station Variable ---
- $Station = isset($doc['Station']) ? $doc['Station'] : ''; 
+$Station = isset($doc['Station']) ? $doc['Station'] : ''; 
 
 $sql_files = "SELECT * FROM document_files WHERE doc_id = ? ORDER BY version DESC";
 $stmt_files = $conn->prepare($sql_files);
@@ -282,9 +276,6 @@ $stmt_hist->bind_param("i", $doc_id);
 $stmt_hist->execute();
 $history = $stmt_hist->get_result();
 
-
-
-// Fetch batch_id from office_station table where Station matches
 $batch_id = null;
 if ($Station) {
     $batch_sql = "SELECT id FROM office_station WHERE station = ?";
@@ -298,16 +289,8 @@ if ($Station) {
 }
 
 $next_users = [];
-$next_users = [];
-
 if ($doc['Station'] === $Station) {
-
-    $sql_next = "
-        SELECT user_id, full_name
-        FROM document_signatories
-        WHERE batch_id = ?
-    ";
-
+    $sql_next = "SELECT user_id, full_name FROM document_signatories WHERE batch_id = ?";
     $stmt_next = $conn->prepare($sql_next);
     $stmt_next->bind_param("i", $batch_id);
     $stmt_next->execute();
@@ -316,11 +299,8 @@ if ($doc['Station'] === $Station) {
     while ($row = $res_next->fetch_assoc()) {
         $next_users[] = $row;
     }
-
     $stmt_next->close();
 }
-
-
 ?>
 
 <!DOCTYPE html>
@@ -335,6 +315,8 @@ if ($doc['Station'] === $Station) {
     <script src="https://unpkg.com/docx-preview/dist/docx-preview.min.js"></script>
     
     <script src="https://cdn.tiny.cloud/1/nhgr79jw7mch6vkui23a189kenqp8v0bc6e9akjt5gmickj9/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); 
@@ -536,6 +518,8 @@ if ($doc['Station'] === $Station) {
     </div>
 </div>
 
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
 <script>
     function toggleNextUser() {
         const action = document.getElementById('action_type').value;
@@ -593,13 +577,13 @@ if ($doc['Station'] === $Station) {
                 if(data.status === 'success') {
                     tinymce.get('tinyEditor').setContent(data.content);
                 } else {
-                    alert("Error: " . data.message);
+                    showToast("Error: " + data.message, 'error');
                     closeEditor();
                 }
             })
             .catch(err => {
                 console.error(err);
-                alert("Server connection failed.");
+                showToast("Server connection failed.", 'error');
                 closeEditor();
             });
     }
@@ -608,9 +592,37 @@ if ($doc['Station'] === $Station) {
         document.getElementById('editorModal').classList.add('hidden');
     }
 
+    // --- Toast Notification Logic ---
+    function showToast(msg, type) {
+        // Green for success, Red for error
+        let bg = type === 'success' ? "linear-gradient(to right, #10b981, #047857)" : "linear-gradient(to right, #ef4444, #b91c1c)";
+        
+        Toastify({
+            text: msg,
+            duration: 3000,
+            close: true,
+            gravity: "top", // `top` or `bottom`
+            position: "right", // `left`, `center` or `right`
+            stopOnFocus: true, // Prevents dismissing of toast on hover
+            style: {
+                background: bg,
+                borderRadius: "8px",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+            },
+        }).showToast();
+    }
+
+    // Process PHP Toasts
     <?php if (!empty($toasts)): foreach($toasts as $t): ?>
-        alert("<?php echo $t['message']; ?>");
-        <?php if($t['type'] === 'success') echo "window.location.href='my_queue.php';"; ?>
+        showToast("<?php echo addslashes($t['message']); ?>", "<?php echo $t['type']; ?>");
+        
+        // If success, delay redirect slightly so user sees the message
+        <?php if($t['type'] === 'success'): ?>
+            setTimeout(function() {
+                window.location.href = 'my_queue.php';
+            }, 2000); // 2 second delay
+        <?php endif; ?>
+
     <?php endforeach; endif; ?>
     
     toggleNextUser();
